@@ -114,6 +114,33 @@ export interface DemoScenario {
   pipelineState: PipelineState;
 }
 
+// ─── Genome Identification ───────────────────────────────────────────────────
+
+export interface GenomeCandidate {
+  rank: number;
+  accession: string;
+  organism: string;
+  alignmentScore: number;
+  matchedLength: number;
+  targetStart: number;
+  targetEnd: number;
+  sharedKmers: number;
+  lowComplexity: boolean;
+  hasPolyATail: boolean;
+}
+
+export interface GenomeIdentificationResult {
+  status: 'success' | 'abstained' | 'no_match' | 'error';
+  querySequence: string;
+  queryLength: number;
+  totalCandidatesEvaluated: number;
+  topCandidates: GenomeCandidate[];
+  closestMatch: GenomeCandidate | null;
+  abstain: boolean;
+  abstainReason: string | null;
+  searchTimeMs: number;
+}
+
 // ─── API Interface ────────────────────────────────────────────────────────────
 
 export interface ExtractionRequest {
@@ -122,12 +149,14 @@ export interface ExtractionRequest {
   targetField: string;
   alphabet: 'DNA' | 'RNA';
   useAi?: boolean;
+  searchDatabase?: boolean;
 }
 
 export interface HelixGuardApiResponse {
   extractionResult: ExtractionResult;
   alignmentResult: AlignmentResult;
   pipelineState: PipelineState;
+  genomeIdentification?: GenomeIdentificationResult;
 }
 
 export interface StructuredError {
@@ -145,3 +174,4 @@ export interface TestCase {
   expectedOutcome: string;
   scenarioId: string;
 }
+

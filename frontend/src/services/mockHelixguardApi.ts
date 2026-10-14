@@ -84,7 +84,55 @@ class MockHelixGuardApi implements IHelixGuardApi {
           alignment: status === 'abstained' ? 'skipped' : 'success',
         },
       },
+      genomeIdentification: request.searchDatabase || request.referenceSequence === 'DATABASE' ? {
+        status: 'success',
+        querySequence: observed || 'ATCGTTCGACTG',
+        queryLength: (observed || 'ATCGTTCGACTG').length,
+        totalCandidatesEvaluated: 19625,
+        topCandidates: [
+          {
+            rank: 1,
+            accession: 'NC_008987.1',
+            organism: 'Hyposoter fugitivus ichnovirus DNA, segment D2, complete sequence',
+            alignmentScore: 160,
+            matchedLength: (observed || 'ATCGTTCGACTG').length,
+            targetStart: 500,
+            targetEnd: 580,
+            sharedKmers: 4,
+            lowComplexity: false,
+            hasPolyATail: false,
+          },
+          {
+            rank: 2,
+            accession: 'NC_023162.1',
+            organism: 'Carp picornavirus 1 isolate F37/06, complete genome',
+            alignmentScore: 48,
+            matchedLength: 24,
+            targetStart: 7600,
+            targetEnd: 7640,
+            sharedKmers: 1,
+            lowComplexity: false,
+            hasPolyATail: true,
+          },
+        ],
+        closestMatch: {
+          rank: 1,
+          accession: 'NC_008987.1',
+          organism: 'Hyposoter fugitivus ichnovirus DNA, segment D2, complete sequence',
+          alignmentScore: 160,
+          matchedLength: (observed || 'ATCGTTCGACTG').length,
+          targetStart: 500,
+          targetEnd: 580,
+          sharedKmers: 4,
+          lowComplexity: false,
+          hasPolyATail: false,
+        },
+        abstain: false,
+        abstainReason: null,
+        searchTimeMs: 3.8,
+      } : undefined,
     };
+
   }
 
   async runScenario(scenarioId: string): Promise<HelixGuardApiResponse> {

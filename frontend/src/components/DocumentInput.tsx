@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles, Image as ImageIcon, Dna } from 'lucide-react';
 import type { ExtractionRequest } from '../types/helixguard';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 
@@ -54,6 +54,7 @@ export function DocumentInput({
   const [targetField, setTargetField] = useState('Observed sequence');
   const [alphabet, setAlphabet] = useState<'DNA' | 'RNA'>('DNA');
   const [useAi, setUseAi] = useState(true);
+  const [useDatabase, setUseDatabase] = useState(true);
 
   // File upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -223,8 +224,16 @@ export function DocumentInput({
   };
 
   const handleRun = () => {
-    onRun({ documentText, referenceSequence, targetField, alphabet, useAi });
+    onRun({
+      documentText,
+      referenceSequence: useDatabase ? 'DATABASE' : referenceSequence,
+      targetField,
+      alphabet,
+      useAi,
+      searchDatabase: useDatabase,
+    });
   };
+
 
   const docErr = errors.find((e) => e.field === 'documentText');
   const refErr = errors.find((e) => e.field === 'referenceSequence');
@@ -416,29 +425,79 @@ export function DocumentInput({
           </div>
         </div>
 
-        {/* Reference sequence */}
+        {/* Reference Mode Selection */}
         <div>
-          <label htmlFor="reference-sequence" className="label">
-            Reference sequence
-          </label>
-          <input
-            id="reference-sequence"
-            type="text"
-            value={referenceSequence}
-            onChange={(e) => setReferenceSequence(e.target.value.toUpperCase())}
-            className={`input font-mono tracking-widest ${
-              refErr ? 'border-red-400 focus:ring-red-500' : ''
-            }`}
-            placeholder="e.g. ATCGATCG"
-            aria-describedby={refErr ? 'ref-error' : undefined}
-            spellCheck={false}
-          />
-          {refErr && (
-            <span id="ref-error" className="text-[10px] text-red-600 mt-1 block">
-              {refErr.message}
-            </span>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="label mb-0">Reference Target</label>
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-md text-xs">
+              <button
+                type="button"
+                onClick={() => setUseDatabase(true)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  useDatabase
+                    ? 'bg-white text-purple-700 shadow-xs border border-purple-200'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Viral Database (19,625 Genomes)
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseDatabase(false)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  !useDatabase
+                    ? 'bg-white text-slate-800 shadow-xs border border-slate-200'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Custom Sequence
+              </button>
+            </div>
+          </div>
+
+          {useDatabase ? (
+            <div className="flex items-center justify-between p-3 bg-purple-50/70 border border-purple-200 rounded-md text-xs text-purple-900">
+              <div className="flex items-center gap-2.5">
+                <Dna size={18} className="text-purple-600 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold text-purple-950 flex items-center gap-1.5">
+                    <span>RefSeq Viral Multi-FASTA Database</span>
+                    <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-normal">
+                      19,625 Genomes
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-purple-700 mt-0.5">
+                    Finds the closest matching genome via k-mer prefiltering &amp; C++ Smith-Waterman alignment.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] bg-purple-200/60 text-purple-900 font-mono px-2 py-0.5 rounded font-medium border border-purple-300/50">
+                viral.1.1.genomic.fna
+              </span>
+            </div>
+          ) : (
+            <div>
+              <input
+                id="reference-sequence"
+                type="text"
+                value={referenceSequence}
+                onChange={(e) => setReferenceSequence(e.target.value.toUpperCase())}
+                className={`input font-mono tracking-widest ${
+                  refErr ? 'border-red-400 focus:ring-red-500' : ''
+                }`}
+                placeholder="e.g. ATCGATCG"
+                aria-describedby={refErr ? 'ref-error' : undefined}
+                spellCheck={false}
+              />
+              {refErr && (
+                <span id="ref-error" className="text-[10px] text-red-600 mt-1 block">
+                  {refErr.message}
+                </span>
+              )}
+            </div>
           )}
         </div>
+
 
         {/* Controls row */}
         <div className="grid grid-cols-2 gap-3">
@@ -519,9 +578,10 @@ export function DocumentInput({
           disabled={loading || isUploading}
           className="btn-primary w-full justify-center py-2"
         >
-          <Play size={14} />
-          {loading ? 'Processing…' : 'Extract & Align'}
+          {useDatabase ? <Dna size={14} /> : <Play size={14} />}
+          {loading ? 'Processing…' : useDatabase ? 'Extract & Identify Closest Genome' : 'Extract & Align'}
         </button>
+
       </div>
     </div>
   );

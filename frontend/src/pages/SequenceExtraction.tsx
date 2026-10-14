@@ -2,6 +2,7 @@ import type { HelixGuardApiResponse } from '../types/helixguard';
 import { DocumentInput } from '../components/DocumentInput';
 import { ExtractionEvidence } from '../components/ExtractionEvidence';
 import { AnchorRecoveryInspector } from '../components/AnchorRecoveryInspector';
+import { GenomeIdentificationCard } from '../components/GenomeIdentificationCard';
 import { PipelineStepper } from '../components/PipelineStepper';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 import type { ExtractionRequest, PipelineState } from '../types/helixguard';
@@ -51,6 +52,10 @@ export function SequenceExtraction({
 
         {/* Right column */}
         <div className="space-y-4">
+          {result?.genomeIdentification && (
+            <GenomeIdentificationCard identification={result.genomeIdentification} />
+          )}
+
           {result ? (
             <ExtractionEvidence result={result.extractionResult} />
           ) : (
@@ -58,12 +63,13 @@ export function SequenceExtraction({
               <div className="card-header"><span className="card-title">Extraction Evidence</span></div>
               <div className="card-body">
                 <p className="text-xs text-slate-400 italic">
-                  Run a demo scenario or click "Extract &amp; Align" to see extraction evidence here.
+                  Run a demo scenario or click "Extract &amp; Identify" to see extraction evidence and closest genome matches here.
                 </p>
               </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

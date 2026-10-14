@@ -23,10 +23,15 @@ services:
       - OLLAMA_URL=${OLLAMA_URL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:31b}
       - OLLAMA_API_KEYS=${OLLAMA_API_KEYS:-}
+      - GENOME_DATABASE_PATH=/app/data/viral.1.1.genomic.fna
       - LOG_LEVEL=INFO
+    volumes:
+      - ./viral.1.1.genomic.fna:/app/data/viral.1.1.genomic.fna:ro
+      - viral_cache_data:/app/data
     depends_on:
       - engine
     restart: unless-stopped
+
 
   frontend:
     build:
@@ -41,3 +46,7 @@ services:
     depends_on:
       - middleware
     restart: unless-stopped
+
+volumes:
+  viral_cache_data:
+

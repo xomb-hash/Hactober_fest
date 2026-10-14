@@ -48,3 +48,6 @@ frontend/.env.local
 
 # Sample genomic files
 *.fna
+*.cache
+.*.cache
+

@@ -219,19 +219,22 @@ class GenomeDatabase:
         self._build_index()
         self.is_loaded = True
 
-        # Save cache if full database was loaded
+        # Save cache atomically if full database was loaded
         if use_cache and not max_records:
             try:
                 os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
-                with open(cache_file, "wb") as f:
+                tmp_cache = cache_file + ".tmp"
+                with open(tmp_cache, "wb") as f:
                     pickle.dump(
                         {"records": self.records, "kmer_index": self.kmer_index},
                         f,
                         protocol=pickle.HIGHEST_PROTOCOL,
                     )
+                os.replace(tmp_cache, cache_file)
                 logger.info("Saved genome database cache to %s", cache_file)
             except Exception as exc:
                 logger.warning("Could not write cache file: %s", exc)
+
 
         return True
 
@@ -542,16 +545,22 @@ class GenomeDatabase:
         return max_score, m
 
 
-# Singleton instance
+import threading
+
+# Singleton instance and lock
 _GLOBAL_GENOME_DATABASE: Optional[GenomeDatabase] = None
+_DB_LOCK = threading.Lock()
 
 
 def get_genome_database() -> GenomeDatabase:
     """Returns the singleton GenomeDatabase instance, initializing lazily if needed."""
     global _GLOBAL_GENOME_DATABASE
     if _GLOBAL_GENOME_DATABASE is None:
-        db = GenomeDatabase(k=13, step=32)
-        # Attempt to load from default paths
-        db.load(use_cache=True)
-        _GLOBAL_GENOME_DATABASE = db
+        with _DB_LOCK:
+            if _GLOBAL_GENOME_DATABASE is None:
+                db = GenomeDatabase(k=13, step=32)
+                _GLOBAL_GENOME_DATABASE = db
+                # Load within lock so other threads wait on initialized db
+                db.load(use_cache=True)
     return _GLOBAL_GENOME_DATABASE
+
