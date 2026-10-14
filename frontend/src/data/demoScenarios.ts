@@ -474,6 +474,238 @@ const scenarioWithMismatches: DemoScenario = {
   pipelineState: scenarioA.pipelineState,
 };
 
+// ─── TC-11: Viral Genome Identification (RefSeq Database Search) ───────────────
+
+const scenarioViralIdentification: DemoScenario = {
+  id: 'tc-viral-identification',
+  name: 'TC-11 Viral Genome Identification (RefSeq Search)',
+  description:
+    'Pan-viral clinical screening: Query sequence is extracted and verified from the report, then screened across 19,625 RefSeq viral genomes via k-mer inverted index and Smith–Waterman alignment.',
+  expectedOutcome: 'Verified from source. Screened 19,625 RefSeq viral genomes; matched Hyposoter fugitivus ichnovirus (NC_008987.1).',
+  documentText: `CLINICAL VIROLOGY REPORT — SYNTHETIC DEMO
+
+Patient ID: V-40912
+Specimen: Unknown Viral Isolate
+Target Field: Observed sequence
+
+Observed sequence: TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT
+
+Laboratory Notes: Extracted fragment submitted for pan-viral RefSeq database search and clinical attribution.`,
+  referenceSequence: 'DATABASE',
+  targetField: 'Observed sequence',
+  alphabet: 'DNA',
+  extractionResult: {
+    extractedSequence: 'TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT',
+    extractionStatus: 'verified',
+    sourceFidelityStatus: 'verified',
+    boundaryVerificationStatus: 'verified',
+    completenessStatus: 'complete',
+    recoveryMethod: 'none',
+    anchorVerification: {
+      anchorBefore: 'Observed sequence:',
+      anchorAfter: 'Laboratory Notes:',
+      candidateQuote: 'TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT',
+      anchorBeforeMatched: 'matched',
+      anchorAfterMatched: 'matched',
+      candidateOccurrences: 1,
+      recoveryStrategy: 'none',
+      recoverySucceeded: true,
+      finalDecision: 'verified',
+      finalReason: 'Extracted sequence verified from field context against source document.',
+    },
+    provenance: {
+      sourceOffsetStart: 104,
+      sourceOffsetEnd: 184,
+      sourceField: 'Observed sequence',
+      normalizationOps: [],
+    },
+    validationErrors: [],
+  },
+  alignmentResult: smithWaterman(
+    'TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT',
+    'TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT',
+    DEFAULT_SCORING
+  ),
+  pipelineState: {
+    currentStage: 'complete',
+    stages: {
+      input: 'success',
+      localization: 'success',
+      verification: 'success',
+      alignment: 'success',
+    },
+  },
+  genomeIdentification: {
+    status: 'success',
+    querySequence: 'TTACCTGCACAGCTCTGCATAGTCCTACACTGATACGGATGAAAGAAATGAAACTAAACATATTAAACACAACCATTTAT',
+    queryLength: 80,
+    totalCandidatesEvaluated: 19625,
+    topCandidates: [
+      {
+        rank: 1,
+        accession: 'NC_008987.1',
+        organism: 'Hyposoter fugitivus ichnovirus DNA, segment D2, complete sequence',
+        alignmentScore: 160,
+        matchedLength: 80,
+        targetStart: 0,
+        targetEnd: 280,
+        sharedKmers: 3,
+        lowComplexity: false,
+        hasPolyATail: false,
+      },
+      {
+        rank: 2,
+        accession: 'NC_038814.1',
+        organism: 'Cardamom bushy dwarf virus clone Fr-S22 segment DNA-U1, complete sequence',
+        alignmentScore: 83,
+        matchedLength: 80,
+        targetStart: 0,
+        targetEnd: 1080,
+        sharedKmers: 1,
+        lowComplexity: false,
+        hasPolyATail: false,
+      },
+      {
+        rank: 3,
+        accession: 'NC_047736.1',
+        organism: 'Bacillus phage B5S, complete genome',
+        alignmentScore: 82,
+        matchedLength: 80,
+        targetStart: 39968,
+        targetEnd: 40448,
+        sharedKmers: 1,
+        lowComplexity: false,
+        hasPolyATail: false,
+      },
+    ],
+    closestMatch: {
+      rank: 1,
+      accession: 'NC_008987.1',
+      organism: 'Hyposoter fugitivus ichnovirus DNA, segment D2, complete sequence',
+      alignmentScore: 160,
+      matchedLength: 80,
+      targetStart: 0,
+      targetEnd: 280,
+      sharedKmers: 3,
+      lowComplexity: false,
+      hasPolyATail: false,
+    },
+    abstain: false,
+    abstainReason: null,
+    searchTimeMs: 183.0,
+  },
+};
+
+// ─── TC-12: Viral Database Low-Complexity Poly-A Abstain ───────────────────────
+
+const scenarioViralPolyAAbstain: DemoScenario = {
+  id: 'tc-viral-poly-a-abstain',
+  name: 'TC-12 Viral Database Low-Complexity Poly-A Abstain',
+  description:
+    'Homopolymer run safety gating: Query is a terminal poly-A sequence. Gating flags potential score inflation against picornavirus poly-A tail and safely abstains on organism attribution.',
+  expectedOutcome: 'Abstained on database match: LOW_COMPLEXITY_POLY_A_MATCH to prevent false-positive attribution.',
+  documentText: `CLINICAL VIROLOGY REPORT — SYNTHETIC DEMO
+
+Patient ID: V-88219
+Specimen: Unknown Viral Isolate
+Target Field: Observed sequence
+
+Observed sequence: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+Laboratory Notes: Polyadenylated 3' terminal isolate fragment.`,
+  referenceSequence: 'DATABASE',
+  targetField: 'Observed sequence',
+  alphabet: 'DNA',
+  extractionResult: {
+    extractedSequence: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    extractionStatus: 'verified',
+    sourceFidelityStatus: 'verified',
+    boundaryVerificationStatus: 'verified',
+    completenessStatus: 'complete',
+    recoveryMethod: 'none',
+    anchorVerification: {
+      anchorBefore: 'Observed sequence:',
+      anchorAfter: 'Laboratory Notes:',
+      candidateQuote: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      anchorBeforeMatched: 'matched',
+      anchorAfterMatched: 'matched',
+      candidateOccurrences: 1,
+      recoveryStrategy: 'none',
+      recoverySucceeded: true,
+      finalDecision: 'verified',
+      finalReason: 'Extracted sequence verified from field context against source document.',
+    },
+    provenance: {
+      sourceOffsetStart: 104,
+      sourceOffsetEnd: 154,
+      sourceField: 'Observed sequence',
+      normalizationOps: [],
+    },
+    validationErrors: [],
+  },
+  alignmentResult: smithWaterman(
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    DEFAULT_SCORING
+  ),
+  pipelineState: {
+    currentStage: 'complete',
+    stages: {
+      input: 'success',
+      localization: 'success',
+      verification: 'success',
+      alignment: 'warning',
+    },
+  },
+  genomeIdentification: {
+    status: 'abstained',
+    querySequence: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    queryLength: 50,
+    totalCandidatesEvaluated: 19625,
+    topCandidates: [
+      {
+        rank: 1,
+        accession: 'NC_023162.1',
+        organism: 'Carp picornavirus 1 isolate F37/06, complete genome',
+        alignmentScore: 100,
+        matchedLength: 50,
+        targetStart: 7432,
+        targetEnd: 7697,
+        sharedKmers: 38,
+        lowComplexity: true,
+        hasPolyATail: true,
+      },
+      {
+        rank: 2,
+        accession: 'NC_043103.1',
+        organism: 'Bat astrovirus Tm/Guangxi/LD38/2007 non-structural polyprotein 1AB gene',
+        alignmentScore: 100,
+        matchedLength: 50,
+        targetStart: 3989,
+        targetEnd: 4241,
+        sharedKmers: 38,
+        lowComplexity: true,
+        hasPolyATail: true,
+      },
+    ],
+    closestMatch: {
+      rank: 1,
+      accession: 'NC_023162.1',
+      organism: 'Carp picornavirus 1 isolate F37/06, complete genome',
+      alignmentScore: 100,
+      matchedLength: 50,
+      targetStart: 7432,
+      targetEnd: 7697,
+      sharedKmers: 38,
+      lowComplexity: true,
+      hasPolyATail: true,
+    },
+    abstain: true,
+    abstainReason: 'LOW_COMPLEXITY_POLY_A_MATCH: Match is dominated by repetitive sequence (e.g. poly-A tail).',
+    searchTimeMs: 144.3,
+  },
+};
+
 // ─── Exported collections ─────────────────────────────────────────────────────
 
 export const ANCHOR_SCENARIOS: DemoScenario[] = [scenarioA, scenarioB, scenarioC];
@@ -492,6 +724,8 @@ export const ALL_SCENARIOS: Record<string, DemoScenario> = {
   'tc-duplicate-quote': scenarioDuplicateQuote,
   'tc-invalid-chars': scenarioInvalidChars,
   'tc-alignment-mismatches': scenarioWithMismatches,
+  'tc-viral-identification': scenarioViralIdentification,
+  'tc-viral-poly-a-abstain': scenarioViralPolyAAbstain,
 };
 
 export const TEST_CASES: TestCase[] = [
@@ -568,6 +802,22 @@ export const TEST_CASES: TestCase[] = [
       'Verified sequence is aligned against reference; mismatches are visible in the DP matrix.',
     expectedOutcome: 'Verified. Alignment matrix shows mismatch columns.',
     scenarioId: 'tc-alignment-mismatches',
+  },
+  {
+    id: 'tc-11',
+    name: 'TC-11 Viral Genome Identification (RefSeq Search)',
+    description:
+      'Screens verified query against 19,625 RefSeq viral genomes, matching Hyposoter fugitivus ichnovirus (NC_008987.1).',
+    expectedOutcome: 'Verified from source. Screened 19,625 RefSeq viral genomes; matched NC_008987.1.',
+    scenarioId: 'tc-viral-identification',
+  },
+  {
+    id: 'tc-12',
+    name: 'TC-12 Viral Low-Complexity Poly-A Abstain',
+    description:
+      'Safety gating flags homopolymer run matching Carp picornavirus poly-A tail and safely abstains.',
+    expectedOutcome: 'Abstained on database match: LOW_COMPLEXITY_POLY_A_MATCH.',
+    scenarioId: 'tc-viral-poly-a-abstain',
   },
 ];
 

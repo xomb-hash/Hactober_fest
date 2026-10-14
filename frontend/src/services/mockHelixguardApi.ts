@@ -144,6 +144,7 @@ class MockHelixGuardApi implements IHelixGuardApi {
       extractionResult: scenario.extractionResult,
       alignmentResult: scenario.alignmentResult,
       pipelineState: scenario.pipelineState,
+      genomeIdentification: (scenario as any).genomeIdentification,
     };
   }
 

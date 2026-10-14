@@ -4,6 +4,7 @@ import { TEST_CASES } from '../data/demoScenarios';
 import type { HelixGuardApiResponse } from '../types/helixguard';
 import { AlignmentMatrix } from '../components/AlignmentMatrix';
 import { ExtractionEvidence } from '../components/ExtractionEvidence';
+import { GenomeIdentificationCard } from '../components/GenomeIdentificationCard';
 
 interface Props {
   onRunScenario: (id: string) => void;
@@ -75,6 +76,9 @@ export function TestCases({ onRunScenario, result, lastScenarioId }: Props) {
         <div className="space-y-4">
           {result ? (
             <>
+              {result.genomeIdentification && (
+                <GenomeIdentificationCard identification={result.genomeIdentification} />
+              )}
               <AlignmentMatrix result={result.alignmentResult} />
               <ExtractionEvidence result={result.extractionResult} />
             </>

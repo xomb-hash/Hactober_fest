@@ -112,6 +112,7 @@ export interface DemoScenario {
   extractionResult: ExtractionResult;
   alignmentResult: AlignmentResult;
   pipelineState: PipelineState;
+  genomeIdentification?: GenomeIdentificationResult;
 }
 
 // ─── Genome Identification ───────────────────────────────────────────────────

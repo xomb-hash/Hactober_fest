@@ -2,6 +2,7 @@ import type { HelixGuardApiResponse, PipelineState } from '../types/helixguard';
 import { AlignmentMatrix } from '../components/AlignmentMatrix';
 import { ExtractionEvidence } from '../components/ExtractionEvidence';
 import { PipelineStepper } from '../components/PipelineStepper';
+import { GenomeIdentificationCard } from '../components/GenomeIdentificationCard';
 
 interface Props {
   result: HelixGuardApiResponse | null;
@@ -15,6 +16,9 @@ export function Alignment({ result, pipelineState }: Props) {
 
       {result ? (
         <div className="space-y-4">
+          {result.genomeIdentification && (
+            <GenomeIdentificationCard identification={result.genomeIdentification} />
+          )}
           <AlignmentMatrix result={result.alignmentResult} />
           <ExtractionEvidence result={result.extractionResult} />
         </div>
