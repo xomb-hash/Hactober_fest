@@ -121,6 +121,7 @@ export interface ExtractionRequest {
   referenceSequence: string;
   targetField: string;
   alphabet: 'DNA' | 'RNA';
+  useAi?: boolean;
 }
 
 export interface HelixGuardApiResponse {

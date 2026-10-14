@@ -44,6 +44,10 @@ class ProvenanceRecord(BaseModel):
     anchor_verification: Optional[AnchorVerification] = None
     recovery_method: Optional[str] = None
     llm_attempts: int = 0
+    ai_scout_used: bool = False
+    scout_model: Optional[str] = None
+    scout_proposal: Optional[dict] = None
+    critic_evaluation: Optional[str] = None
 
     # Verification checklist flags
     candidate_located: bool = False
@@ -69,6 +73,7 @@ class ExtractionRequest(BaseModel):
     anchor_before: Optional[str] = Field(None, description="Optional text immediately preceding candidate")
     anchor_after: Optional[str] = Field(None, description="Optional text immediately following candidate")
     allow_iupac: bool = Field(False, description="Whether IUPAC ambiguity codes are accepted")
+    use_ai: bool = Field(True, description="Whether to query Ollama Cloud Scout for AI-assisted localization")
 
 
 class ExtractionResponse(BaseModel):
@@ -86,6 +91,8 @@ class ExtractionResponse(BaseModel):
     error_code: Optional[str] = Field(None, description="Error or abstention code")
     message: Optional[str] = Field(None, description="Descriptive human-readable explanation")
     provenance: Optional[ProvenanceRecord] = Field(None, description="Full audit provenance record")
+    scout_proposal: Optional[dict] = Field(None, description="Proposal returned by AI Scout agent")
+    critic_evaluation: Optional[str] = Field(None, description="Evaluation returned by Context Critic agent")
 
 
 class MaxCell(BaseModel):
@@ -134,6 +141,7 @@ class ExtractAndAlignRequest(BaseModel):
     anchor_before: Optional[str] = None
     anchor_after: Optional[str] = None
     allow_iupac: bool = False
+    use_ai: bool = True
     scoring: Optional[ScoringConfig] = None
 
 

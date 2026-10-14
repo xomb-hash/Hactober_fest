@@ -135,14 +135,16 @@ class ContextCritic:
                 f"Answer exactly 'YES' or 'NO' followed by a short reason."
             )
 
+            logger.info("Context Critic querying Ollama (%s) for field '%s'...", self.client.model, field_type)
             text_resp = self.client.generate(prompt, format_json=False)
             if text_resp:
+                logger.info("Context Critic response: '%s'", text_resp[:100])
                 if text_resp.upper().startswith("YES"):
                     return True, f"Ollama confirmed field consistency: {text_resp}"
                 elif text_resp.upper().startswith("NO"):
                     return False, f"Ollama rejected field consistency: {text_resp}"
         except Exception as exc:
-            logger.debug("Ollama context evaluation skipped or failed (%s). Using deterministic evaluation.", exc)
+            logger.warning("Ollama context evaluation skipped or failed (%s). Using deterministic evaluation.", exc)
 
         # Fallback to deterministic evaluation
         return self.evaluate_deterministic(document_text, span_start, span_end, field_type)

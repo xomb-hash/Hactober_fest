@@ -38,6 +38,10 @@ class ProvenanceTracker:
         self.anchor_verification: Optional[AnchorVerification] = None
         self.recovery_method: Optional[str] = None
         self.llm_attempts: int = 0
+        self.ai_scout_used: bool = False
+        self.scout_model: Optional[str] = None
+        self.scout_proposal: Optional[dict] = None
+        self.critic_evaluation: Optional[str] = None
 
         # Verification flags
         self.candidate_located: bool = False
@@ -135,6 +139,10 @@ class ProvenanceTracker:
             anchor_verification=self.anchor_verification,
             recovery_method=self.recovery_method,
             llm_attempts=self.llm_attempts,
+            ai_scout_used=self.ai_scout_used,
+            scout_model=self.scout_model,
+            scout_proposal=self.scout_proposal,
+            critic_evaluation=self.critic_evaluation,
             candidate_located=self.candidate_located,
             alphabet_valid=self.alphabet_valid,
             boundaries_verified=self.boundaries_verified,

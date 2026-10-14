@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2 } from 'lucide-react';
+import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import type { ExtractionRequest } from '../types/helixguard';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 
@@ -52,6 +52,7 @@ export function DocumentInput({
   const [referenceSequence, setReferenceSequence] = useState('ATCGATCG');
   const [targetField, setTargetField] = useState('Observed sequence');
   const [alphabet, setAlphabet] = useState<'DNA' | 'RNA'>('DNA');
+  const [useAi, setUseAi] = useState(true);
 
   // File upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -192,7 +193,7 @@ export function DocumentInput({
   };
 
   const handleRun = () => {
-    onRun({ documentText, referenceSequence, targetField, alphabet });
+    onRun({ documentText, referenceSequence, targetField, alphabet, useAi });
   };
 
   const docErr = errors.find((e) => e.field === 'documentText');
@@ -416,6 +417,26 @@ export function DocumentInput({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* AI Scout Assist Toggle */}
+        <div className="flex items-center justify-between px-3 py-2 bg-purple-50/70 border border-purple-200 rounded-md">
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-800 select-none">
+            <input
+              type="checkbox"
+              id="ai-scout-assist-toggle"
+              checked={useAi}
+              onChange={(e) => setUseAi(e.target.checked)}
+              className="rounded border-purple-300 text-purple-600 focus:ring-purple-500 h-4 w-4"
+            />
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={14} className="text-purple-600" />
+              <span>AI Scout Assist (Ollama Cloud · <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded text-[11px] font-mono">gemma4:31b</code>)</span>
+            </div>
+          </label>
+          <span className="text-[11px] font-medium text-purple-700">
+            {useAi ? 'Active (Key Pool)' : 'Deterministic Only'}
+          </span>
         </div>
 
         {/* General errors */}

@@ -142,7 +142,7 @@ async def extract_endpoint(req: ExtractionRequest) -> ExtractionResponse:
     Extracts and deterministically verifies sequence from document text.
     Never accepts model-generated sequence as truth.
     """
-    logger.info("Extraction request received for field_type: '%s', alphabet: '%s'", req.field_type, req.sequence_alphabet)
+    logger.info("Extraction request received for field_type: '%s', alphabet: '%s', use_ai: %s", req.field_type, req.sequence_alphabet, req.use_ai)
     try:
         resp = extract_sequence(
             document_text=req.document_text,
@@ -152,6 +152,7 @@ async def extract_endpoint(req: ExtractionRequest) -> ExtractionResponse:
             anchor_before=req.anchor_before,
             anchor_after=req.anchor_after,
             allow_iupac=req.allow_iupac,
+            use_ai=req.use_ai,
         )
         return resp
     except Exception as exc:
@@ -171,7 +172,7 @@ async def extract_and_align_endpoint(req: ExtractAndAlignRequest) -> ExtractAndA
     3. Critical Gating: Unverified extracted sequence NEVER reaches C++ alignment engine.
     4. Call C++ alignment engine only on verified sequences.
     """
-    logger.info("Extract and align request received for field: '%s'", req.field_type)
+    logger.info("Extract and align request received for field: '%s', use_ai: %s", req.field_type, req.use_ai)
 
     # 1. Validate reference sequence
     ref_valid, ref_err = validate_reference_sequence(
@@ -205,6 +206,7 @@ async def extract_and_align_endpoint(req: ExtractAndAlignRequest) -> ExtractAndA
         anchor_before=req.anchor_before,
         anchor_after=req.anchor_after,
         allow_iupac=req.allow_iupac,
+        use_ai=req.use_ai,
     )
 
     # 3. CRITICAL GATING: Never send unverified sequence to engine

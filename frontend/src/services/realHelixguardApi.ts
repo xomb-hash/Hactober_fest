@@ -44,6 +44,7 @@ export class RealHelixGuardApi implements IHelixGuardApi {
       reference_sequence: request.referenceSequence,
       field_type: request.targetField.toLowerCase().replace(/\s+/g, '_'),
       sequence_alphabet: request.alphabet,
+      use_ai: request.useAi !== false,
     };
 
     const resp = await fetch(`${this.baseUrl}/extract-and-align`, {

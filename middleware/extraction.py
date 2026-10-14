@@ -5,8 +5,11 @@ traceable offset mapping, and provenance generation.
 """
 
 import re
+import logging
 from typing import List, Optional, Tuple
 from pydantic import BaseModel
+
+logger = logging.getLogger("helixguard.extraction")
 
 from middleware.schemas import (
     SourceSpan,
@@ -23,6 +26,7 @@ from middleware.validation import (
 )
 from middleware.provenance import ProvenanceTracker
 from middleware.critic import ContextCritic
+from middleware.scout import ScoutAgent
 from middleware.anchor_recovery import (
     recover_with_anchors,
     parse_sequence_block,
@@ -124,10 +128,11 @@ def extract_sequence(
     anchor_before: Optional[str] = None,
     anchor_after: Optional[str] = None,
     allow_iupac: bool = False,
+    use_ai: bool = True,
     request_id: Optional[str] = None
 ) -> ExtractionResponse:
     """
-    Main deterministic extraction pipeline.
+    Main sequence extraction pipeline combining AI-assisted localization with strict deterministic verification.
     
     Adheres strictly to:
     - Never accept model-generated sequence as truth.
@@ -152,10 +157,35 @@ def extract_sequence(
             source_span=None,
             error_code="EMPTY_DOCUMENT",
             message="Document text is empty.",
-            provenance=tracker.build_record()
+            provenance=tracker.build_record(),
+            scout_proposal=None,
+            critic_evaluation=None,
         )
 
-    # 2. If candidate quote or anchors are provided, route through anchor recovery
+    # 2. AI Scout localization when anchors/quotes are not provided
+    if candidate_quote is None and anchor_before is None and anchor_after is None and use_ai:
+        try:
+            scout = ScoutAgent()
+            tracker.llm_attempts += 1
+            logger.info("Calling Ollama Cloud Scout agent (%s) for field '%s'...", scout.client.model, field_type)
+            proposal = scout.propose_with_llm(document_text, field_type, alphabet)
+            if proposal and proposal.candidate_quote:
+                tracker.ai_scout_used = True
+                tracker.scout_model = scout.client.model
+                tracker.scout_proposal = proposal.model_dump()
+                candidate_quote = proposal.candidate_quote
+                anchor_before = proposal.anchor_before
+                anchor_after = proposal.anchor_after
+                logger.info(
+                    "Ollama Scout proposed sequence quote '%s' (before: '%s', after: '%s'). Forwarding to deterministic verifier.",
+                    proposal.candidate_quote,
+                    proposal.anchor_before,
+                    proposal.anchor_after,
+                )
+        except Exception as exc:
+            logger.warning("Ollama Scout proposal encountered error (%s). Proceeding with deterministic fallback.", exc)
+
+    # 3. If candidate quote or anchors are provided, route through anchor recovery
     if candidate_quote is not None or anchor_before is not None or anchor_after is not None:
         recovery_result = recover_with_anchors(
             document_text=document_text,
@@ -200,7 +230,9 @@ def extract_sequence(
                 anchors_verified=recovery_result.anchors_verified,
                 source_span=recovery_result.source_span,
                 message=recovery_result.message,
-                provenance=tracker.build_record()
+                provenance=tracker.build_record(),
+                scout_proposal=tracker.scout_proposal,
+                critic_evaluation=tracker.critic_evaluation,
             )
         else:
             final_status = recovery_result.status
@@ -216,10 +248,12 @@ def extract_sequence(
                 source_span=recovery_result.source_span,
                 error_code=recovery_result.error_code,
                 message=recovery_result.message,
-                provenance=tracker.build_record()
+                provenance=tracker.build_record(),
+                scout_proposal=tracker.scout_proposal,
+                critic_evaluation=tracker.critic_evaluation,
             )
 
-    # 3. No candidate quote or anchors provided: deterministic field discovery
+    # 4. No candidate quote or anchors provided: deterministic field discovery
     critic = ContextCritic()
     candidates = find_candidate_spans(document_text, field_type, alphabet, allow_iupac)
 
@@ -236,13 +270,19 @@ def extract_sequence(
             source_span=None,
             error_code="NO_SEQUENCE_FOUND",
             message="No sequence matching field criteria found in document.",
-            provenance=tracker.build_record()
+            provenance=tracker.build_record(),
+            scout_proposal=tracker.scout_proposal,
+            critic_evaluation=tracker.critic_evaluation,
         )
 
-    # Evaluate candidates by field support
+    # Evaluate candidates by field support (using Ollama Context Critic if use_ai=True)
     supported_candidates: List[CandidateSpan] = []
     for cand in candidates:
-        field_ok, _ = critic.evaluate_deterministic(document_text, cand.start, cand.end, field_type)
+        if use_ai:
+            field_ok, critic_msg = critic.evaluate_with_llm(document_text, cand.start, cand.end, field_type)
+            tracker.critic_evaluation = critic_msg
+        else:
+            field_ok, critic_msg = critic.evaluate_deterministic(document_text, cand.start, cand.end, field_type)
         if field_ok:
             supported_candidates.append(cand)
 
@@ -265,7 +305,9 @@ def extract_sequence(
                 completeness_verified=False,
                 error_code="INVALID_NUCLEOTIDE_CHARACTERS",
                 message=f"Invalid nucleotide characters: {','.join(set(invalids))}",
-                provenance=tracker.build_record()
+                provenance=tracker.build_record(),
+                scout_proposal=tracker.scout_proposal,
+                critic_evaluation=tracker.critic_evaluation,
             )
 
         assert offset_map is not None
@@ -291,7 +333,9 @@ def extract_sequence(
             anchors_verified=False,
             source_span=span,
             message="Deterministically extracted and verified from field context.",
-            provenance=tracker.build_record()
+            provenance=tracker.build_record(),
+            scout_proposal=tracker.scout_proposal,
+            critic_evaluation=tracker.critic_evaluation,
         )
 
     elif len(supported_candidates) > 1:
@@ -306,7 +350,9 @@ def extract_sequence(
             anchors_verified=False,
             error_code="AMBIGUOUS_SOURCE_LOCATION",
             message="Multiple candidate sequence locations remain plausible for the requested field.",
-            provenance=tracker.build_record()
+            provenance=tracker.build_record(),
+            scout_proposal=tracker.scout_proposal,
+            critic_evaluation=tracker.critic_evaluation,
         )
     else:
         tracker.record_decision("abstained", "abstained", "CONTEXT_FIELD_MISMATCH")
@@ -320,5 +366,7 @@ def extract_sequence(
             anchors_verified=False,
             error_code="CONTEXT_FIELD_MISMATCH",
             message="Found sequences do not match the requested semantic field context.",
-            provenance=tracker.build_record()
+            provenance=tracker.build_record(),
+            scout_proposal=tracker.scout_proposal,
+            critic_evaluation=tracker.critic_evaluation,
         )

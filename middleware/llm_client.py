@@ -121,10 +121,22 @@ class OllamaClient:
 
         endpoint = f"{self.base_url}/generate" if self.base_url.endswith("/api") else f"{self.base_url}/api/generate"
 
+        import time
         for attempt in range(attempts):
             current_key = self.key_pool.get_current_key()
             headers = self.key_pool.get_headers(current_key)
+            masked_key = f"...{current_key[-4:]}" if current_key and len(current_key) > 4 else "none"
 
+            logger.info(
+                "--> Sending request to Ollama Cloud: URL=%s, model=%s, key=%s (attempt %d/%d)",
+                endpoint,
+                self.model,
+                masked_key,
+                attempt + 1,
+                attempts,
+            )
+
+            start_t = time.perf_counter()
             try:
                 with httpx.Client(timeout=effective_timeout) as client:
                     resp = client.post(
@@ -132,11 +144,18 @@ class OllamaClient:
                         json=payload,
                         headers=headers,
                     )
+                    elapsed = time.perf_counter() - start_t
 
                     # Successful response
                     if resp.status_code == 200:
                         data = resp.json()
-                        return data.get("response", "").strip()
+                        resp_text = data.get("response", "").strip()
+                        logger.info(
+                            "<-- Ollama Cloud response received: HTTP 200 in %.2fs (length: %d chars)",
+                            elapsed,
+                            len(resp_text),
+                        )
+                        return resp_text
 
                     # Rate limited or auth failed -> rotate key and retry
                     elif resp.status_code in (429, 401, 403) and self.key_pool.has_keys:

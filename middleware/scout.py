@@ -152,11 +152,16 @@ class ScoutAgent:
         prompt += f"\nDocument:\n'''\n{document_text}\n'''\nJSON:"
 
         try:
+            logger.info("Scout agent querying Ollama (%s) for field '%s'...", self.client.model, field_type)
             response_text = self.client.generate(prompt, format_json=True)
             if response_text:
-                parsed = json.loads(response_text)
+                clean_text = response_text.strip()
+                if clean_text.startswith("```"):
+                    clean_text = re.sub(r"^```[a-zA-Z]*\s*", "", clean_text)
+                    clean_text = re.sub(r"\s*```$", "", clean_text)
+                parsed = json.loads(clean_text)
                 if "candidate_quote" in parsed and parsed["candidate_quote"]:
-                    return ScoutProposal(
+                    prop = ScoutProposal(
                         field_type=parsed.get("field_type", field_type),
                         candidate_quote=str(parsed["candidate_quote"]).strip(),
                         anchor_before=str(parsed.get("anchor_before", "")).strip() or None,
@@ -164,8 +169,10 @@ class ScoutAgent:
                         expected_alphabet=parsed.get("expected_alphabet", alphabet),
                         reason=str(parsed.get("reason", "Ollama scout localization"))
                     )
+                    logger.info("Scout agent proposal received: candidate_quote='%s', anchors='%s'/'%s'", prop.candidate_quote, prop.anchor_before, prop.anchor_after)
+                    return prop
         except Exception as exc:
-            logger.debug("Ollama scout request failed or unavailable (%s). Falling back to deterministic proposal.", exc)
+            logger.warning("Ollama scout request failed or unavailable (%s). Falling back to deterministic proposal.", exc)
 
         # Fallback to deterministic proposal
         return self.propose_deterministic(document_text, field_type, alphabet, previous_failure)
