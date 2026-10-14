@@ -1,10 +1,6 @@
-"""
-FastAPI application for HelixGuard verification-first genomic middleware.
-Provides endpoints for sequence extraction, alignment gating, and system health.
-"""
-
 import os
 import logging
+import threading
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -21,10 +17,15 @@ from middleware.schemas import (
     AlignmentRequest,
     AlignmentResponse,
     DocumentUploadResponse,
+    GenomeIdentificationRequest,
+    GenomeIdentificationResponse,
+    ExtractAndIdentifyRequest,
+    ExtractAndIdentifyResponse,
 )
 from middleware.validation import validate_reference_sequence
 from middleware.extraction import extract_sequence
 from middleware.document_parser import extract_text_from_file
+from middleware.database import get_genome_database
 
 load_dotenv()
 
@@ -39,9 +40,23 @@ ENGINE_URL = os.getenv("ENGINE_URL", "http://localhost:8080").rstrip("/")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 
 
+def _bg_load_genome_database():
+    """Background loader for viral genome database."""
+    try:
+        logger.info("Background genome database worker started.")
+        db = get_genome_database()
+        if db.is_loaded:
+            logger.info("Genome database ready: %d records, %d kmers", len(db.records), len(db.kmer_index))
+    except Exception as exc:
+        logger.warning("Background genome database initialization notice: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("HelixGuard Middleware starting up. Engine URL: %s", ENGINE_URL)
+    # Launch database load in background so server starts immediately
+    loader_thread = threading.Thread(target=_bg_load_genome_database, daemon=True)
+    loader_thread.start()
     yield
     logger.info("HelixGuard Middleware shutting down.")
 
@@ -270,3 +285,125 @@ async def extract_and_align_endpoint(req: ExtractAndAlignRequest) -> ExtractAndA
             extraction=extraction_resp,
             alignment=None
         )
+
+
+@app.get("/genome-database/status", tags=["Genomic Database"])
+async def genome_database_status_endpoint():
+    """Returns the operational status, record count, and index metrics of the reference database."""
+    db = get_genome_database()
+    return {
+        "status": "ready" if db.is_loaded else "loading",
+        "total_records": len(db.records),
+        "total_unique_kmers": len(db.kmer_index),
+        "source_path": db.source_path,
+        "k": db.k,
+        "step": db.step,
+    }
+
+
+@app.post("/identify-genome", response_model=GenomeIdentificationResponse, tags=["Genomic Database"])
+async def identify_genome_endpoint(req: GenomeIdentificationRequest) -> GenomeIdentificationResponse:
+    """
+    Identifies which viral genome in the reference database is closest to the given query sequence.
+    Performs k-mer prefiltering and C++ Smith-Waterman alignment on candidate windows.
+    Detects low-complexity/poly-A inflation and abstains if top scores are ambiguous.
+    """
+    logger.info("Genomic identification requested for sequence (length=%d, top_k=%d)", len(req.query_sequence), req.top_k)
+    db = get_genome_database()
+    if not db.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Reference genome database is currently initializing. Please retry in a few moments."
+        )
+
+    # Validate query sequence
+    valid, err = validate_reference_sequence(req.query_sequence, alphabet=req.sequence_alphabet, allow_iupac=req.allow_iupac)
+    if not valid:
+        return GenomeIdentificationResponse(
+            status="error",
+            query_sequence=req.query_sequence,
+            query_length=len(req.query_sequence),
+            total_candidates_evaluated=0,
+            top_candidates=[],
+            closest_match=None,
+            abstain=True,
+            abstain_reason=f"INVALID_QUERY_SEQUENCE: {err}",
+            search_time_ms=0.0
+        )
+
+    return db.identify_closest_genome(
+        query_seq=req.query_sequence,
+        top_k=req.top_k,
+        score_margin_threshold=req.score_margin_threshold,
+        engine_url=ENGINE_URL,
+    )
+
+
+@app.post("/extract-and-identify", response_model=ExtractAndIdentifyResponse, tags=["Pipeline"])
+async def extract_and_identify_endpoint(req: ExtractAndIdentifyRequest) -> ExtractAndIdentifyResponse:
+    """
+    Full verified clinical identification pipeline:
+    1. Deterministic extraction and boundary verification from document/image.
+    2. Strict Gating: unverified extracted sequence NEVER queries the reference database.
+    3. Spaced k-mer prefiltering across thousands of RefSeq viral genomes.
+    4. C++ Smith-Waterman local alignment and candidate ranking.
+    5. Abstain gating for close scores or low complexity.
+    """
+    logger.info("Extract and identify pipeline requested for field: '%s'", req.field_type)
+
+    # 1. Extract and verify query sequence from document
+    extraction_resp = extract_sequence(
+        document_text=req.document_text,
+        field_type=req.field_type,
+        alphabet=req.sequence_alphabet,
+        candidate_quote=req.candidate_quote,
+        anchor_before=req.anchor_before,
+        anchor_after=req.anchor_after,
+        allow_iupac=req.allow_iupac,
+        use_ai=req.use_ai,
+    )
+
+    # 2. Strict Safety Gating: Unverified sequence never reaches the database
+    if (
+        extraction_resp.validation_status != "verified"
+        or not extraction_resp.source_match
+        or not extraction_resp.sequence
+    ):
+        logger.warning(
+            "Gating blocked identification: sequence unverified (status=%s, error_code=%s).",
+            extraction_resp.validation_status,
+            extraction_resp.error_code
+        )
+        return ExtractAndIdentifyResponse(
+            status=extraction_resp.validation_status,
+            extraction=extraction_resp,
+            identification=None,
+            closest_organism=None,
+            closest_accession=None,
+        )
+
+    # 3. Search genome database
+    db = get_genome_database()
+    if not db.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Genome reference database is currently initializing. Please retry in a few moments."
+        )
+
+    ident_resp = db.identify_closest_genome(
+        query_seq=extraction_resp.sequence,
+        top_k=req.top_k,
+        engine_url=ENGINE_URL,
+    )
+
+    closest_org = ident_resp.closest_match.organism if ident_resp.closest_match else None
+    closest_acc = ident_resp.closest_match.accession if ident_resp.closest_match else None
+
+    return ExtractAndIdentifyResponse(
+        status=ident_resp.status,
+        extraction=extraction_resp,
+        identification=ident_resp,
+        closest_organism=closest_org,
+        closest_accession=closest_acc,
+    )
+

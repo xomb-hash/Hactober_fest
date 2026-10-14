@@ -160,3 +160,61 @@ class DocumentUploadResponse(BaseModel):
     character_count: int
     message: str = "Document parsed successfully."
 
+
+class GenomeMatchCandidate(BaseModel):
+    """A ranked genome candidate from the viral reference database."""
+    rank: int
+    accession: str
+    organism: str
+    alignment_score: int
+    matched_length: int
+    target_start: int
+    target_end: int
+    shared_kmers: int
+    low_complexity: bool = False
+    has_poly_a_tail: bool = False
+
+
+class GenomeIdentificationRequest(BaseModel):
+    """Request to identify closest genome in the reference database."""
+    query_sequence: str
+    sequence_alphabet: Literal["DNA", "RNA"] = "DNA"
+    top_k: int = 5
+    score_margin_threshold: float = 0.03
+    allow_iupac: bool = False
+
+
+class GenomeIdentificationResponse(BaseModel):
+    """Response identifying the closest genome(s) from multi-FASTA database."""
+    status: Literal["success", "abstained", "no_match", "error"]
+    query_sequence: str
+    query_length: int
+    total_candidates_evaluated: int
+    top_candidates: List[GenomeMatchCandidate] = Field(default_factory=list)
+    closest_match: Optional[GenomeMatchCandidate] = None
+    abstain: bool = False
+    abstain_reason: Optional[str] = None
+    search_time_ms: float = 0.0
+
+
+class ExtractAndIdentifyRequest(BaseModel):
+    """Extracts sequence from document and identifies closest genome in database."""
+    document_text: str
+    field_type: str = "observed_sequence"
+    sequence_alphabet: Literal["DNA", "RNA"] = "DNA"
+    candidate_quote: Optional[str] = None
+    anchor_before: Optional[str] = None
+    anchor_after: Optional[str] = None
+    allow_iupac: bool = False
+    use_ai: bool = True
+    top_k: int = 5
+
+
+class ExtractAndIdentifyResponse(BaseModel):
+    """Combined response: document extraction + viral genome identification."""
+    status: Literal["success", "abstained", "rejected", "no_match", "error"]
+    extraction: ExtractionResponse
+    identification: Optional[GenomeIdentificationResponse] = None
+    closest_organism: Optional[str] = None
+    closest_accession: Optional[str] = None
+
