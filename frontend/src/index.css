@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-500 rounded-sm;
+  }
+}
+
+@layer components {
+  /* ── Sidebar ──────────────────────────────────────── */
+  .sidebar {
+    @apply flex flex-col bg-white border-r border-slate-200 h-full select-none;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-slate-600
+           hover:bg-slate-100 hover:text-slate-900 transition-colors duration-150 cursor-pointer;
+  }
+
+  .nav-item.active {
+    @apply bg-accent-50 text-accent-700 font-semibold;
+  }
+
+  /* ── Cards ────────────────────────────────────────── */
+  .card {
+    @apply bg-white border border-slate-200 rounded-lg;
+  }
+
+  .card-header {
+    @apply px-4 py-3 border-b border-slate-100 flex items-center justify-between;
+  }
+
+  .card-title {
+    @apply text-sm font-semibold text-slate-800;
+  }
+
+  .card-body {
+    @apply p-4;
+  }
+
+  /* ── Buttons ──────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium
+           transition-colors duration-150 focus-visible:outline-accent-500 disabled:opacity-50
+           disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-600 text-white hover:bg-accent-700;
+  }
+
+  .btn-secondary {
+    @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-50 text-red-700 hover:bg-red-100 border border-red-200;
+  }
+
+  /* ── Inputs ───────────────────────────────────────── */
+  .input {
+    @apply block w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md bg-white
+           text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1
+           focus:ring-accent-500 focus:border-accent-500 transition-colors;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-slate-600 mb-1;
+  }
+
+  /* ── Badges ───────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .badge-verified   { @apply badge bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200; }
+  .badge-candidate  { @apply badge bg-sky-100 text-sky-800 ring-1 ring-sky-200; }
+  .badge-warning    { @apply badge bg-amber-100 text-amber-800 ring-1 ring-amber-200; }
+  .badge-error      { @apply badge bg-red-100 text-red-800 ring-1 ring-red-200; }
+  .badge-abstained  { @apply badge bg-slate-100 text-slate-600 ring-1 ring-slate-200; }
+  .badge-demo       { @apply badge bg-violet-100 text-violet-800 ring-1 ring-violet-200; }
+  .badge-skipped    { @apply badge bg-slate-100 text-slate-500 ring-1 ring-slate-200; }
+
+  /* ── Sequence ─────────────────────────────────────── */
+  .seq {
+    @apply font-mono text-sm tracking-wider;
+  }
+
+  /* ── Table ────────────────────────────────────────── */
+  .evidence-row {
+    @apply flex items-start py-2 border-b border-slate-50 last:border-0 gap-4 text-sm;
+  }
+
+  .evidence-label {
+    @apply w-52 flex-shrink-0 text-slate-500 text-xs font-medium pt-0.5;
+  }
+
+  .evidence-value {
+    @apply text-slate-800 flex-1 min-w-0;
+  }
+
+  /* ── Pipeline stepper ─────────────────────────────── */
+  .step-connector {
+    @apply flex-1 h-px bg-slate-200 mt-4;
+  }
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-slate-400; }
