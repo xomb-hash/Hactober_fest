@@ -1,6 +1,0 @@
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/alignment_lib.dir
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/server.dir
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/test_alignment.dir
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/RUN_TESTS.dir
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/dell/Desktop/Hactober_fest/engine/build/CMakeFiles/ZERO_CHECK.dir

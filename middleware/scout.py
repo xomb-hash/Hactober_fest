@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 import httpx
 
 from middleware.critic import ContextCritic
+from middleware.llm_client import OllamaClient, default_llm_client
 
 logger = logging.getLogger("helixguard.scout")
 
@@ -51,11 +52,14 @@ class ScoutAgent:
         ollama_url: Optional[str] = None,
         model: Optional[str] = None,
         timeout_seconds: float = 3.0,
-        max_attempts: int = 3
+        max_attempts: int = 3,
+        llm_client: Optional[OllamaClient] = None,
     ) -> None:
-        self.ollama_url = (ollama_url or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-        self.timeout_seconds = timeout_seconds
+        self.client = llm_client or OllamaClient(
+            base_url=ollama_url,
+            model=model or os.getenv("OLLAMA_MODEL", "gemma4:31b"),
+            timeout_seconds=timeout_seconds,
+        )
         self.max_attempts = max_attempts
 
     def propose_deterministic(
@@ -148,29 +152,18 @@ class ScoutAgent:
         prompt += f"\nDocument:\n'''\n{document_text}\n'''\nJSON:"
 
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
-                resp = client.post(
-                    f"{self.ollama_url}/api/generate",
-                    json={
-                        "model": self.model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "format": "json"
-                    }
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    response_text = data.get("response", "{}")
-                    parsed = json.loads(response_text)
-                    if "candidate_quote" in parsed and parsed["candidate_quote"]:
-                        return ScoutProposal(
-                            field_type=parsed.get("field_type", field_type),
-                            candidate_quote=str(parsed["candidate_quote"]).strip(),
-                            anchor_before=str(parsed.get("anchor_before", "")).strip() or None,
-                            anchor_after=str(parsed.get("anchor_after", "")).strip() or None,
-                            expected_alphabet=parsed.get("expected_alphabet", alphabet),
-                            reason=str(parsed.get("reason", "Ollama scout localization"))
-                        )
+            response_text = self.client.generate(prompt, format_json=True)
+            if response_text:
+                parsed = json.loads(response_text)
+                if "candidate_quote" in parsed and parsed["candidate_quote"]:
+                    return ScoutProposal(
+                        field_type=parsed.get("field_type", field_type),
+                        candidate_quote=str(parsed["candidate_quote"]).strip(),
+                        anchor_before=str(parsed.get("anchor_before", "")).strip() or None,
+                        anchor_after=str(parsed.get("anchor_after", "")).strip() or None,
+                        expected_alphabet=parsed.get("expected_alphabet", alphabet),
+                        reason=str(parsed.get("reason", "Ollama scout localization"))
+                    )
         except Exception as exc:
             logger.debug("Ollama scout request failed or unavailable (%s). Falling back to deterministic proposal.", exc)
 

@@ -15,6 +15,8 @@ import logging
 from typing import Tuple, Optional, Dict, Any
 import httpx
 
+from middleware.llm_client import OllamaClient, default_llm_client
+
 logger = logging.getLogger("helixguard.critic")
 
 # Field keyword heuristics for deterministic context evaluation
@@ -48,11 +50,14 @@ class ContextCritic:
         self,
         ollama_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout_seconds: float = 2.0
+        timeout_seconds: float = 3.0,
+        llm_client: Optional[OllamaClient] = None,
     ) -> None:
-        self.ollama_url = ollama_url or os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-        self.timeout_seconds = timeout_seconds
+        self.client = llm_client or OllamaClient(
+            base_url=ollama_url,
+            model=model or os.getenv("OLLAMA_MODEL", "gemma4:31b"),
+            timeout_seconds=timeout_seconds,
+        )
 
     def evaluate_deterministic(
         self,
@@ -130,17 +135,12 @@ class ContextCritic:
                 f"Answer exactly 'YES' or 'NO' followed by a short reason."
             )
 
-            with httpx.Client(timeout=self.timeout_seconds) as client:
-                resp = client.post(
-                    f"{self.ollama_url.rstrip('/')}/api/generate",
-                    json={"model": self.model, "prompt": prompt, "stream": False}
-                )
-                if resp.status_code == 200:
-                    text_resp = resp.json().get("response", "").strip()
-                    if text_resp.upper().startswith("YES"):
-                        return True, f"Ollama confirmed field consistency: {text_resp}"
-                    elif text_resp.upper().startswith("NO"):
-                        return False, f"Ollama rejected field consistency: {text_resp}"
+            text_resp = self.client.generate(prompt, format_json=False)
+            if text_resp:
+                if text_resp.upper().startswith("YES"):
+                    return True, f"Ollama confirmed field consistency: {text_resp}"
+                elif text_resp.upper().startswith("NO"):
+                    return False, f"Ollama rejected field consistency: {text_resp}"
         except Exception as exc:
             logger.debug("Ollama context evaluation skipped or failed (%s). Using deterministic evaluation.", exc)
 
