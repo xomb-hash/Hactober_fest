@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from dotenv import load_dotenv
@@ -20,9 +20,11 @@ from middleware.schemas import (
     ExtractAndAlignResponse,
     AlignmentRequest,
     AlignmentResponse,
+    DocumentUploadResponse,
 )
 from middleware.validation import validate_reference_sequence
 from middleware.extraction import extract_sequence
+from middleware.document_parser import extract_text_from_file
 
 load_dotenv()
 
@@ -79,6 +81,59 @@ async def health_check():
         "engine_url": ENGINE_URL,
         "engine_reachable": engine_reachable,
     }
+
+
+@app.post("/upload-document", response_model=DocumentUploadResponse, tags=["Document Ingestion"])
+async def upload_document_endpoint(file: UploadFile = File(...)) -> DocumentUploadResponse:
+    """
+    Parses and extracts raw text from uploaded files:
+    - Plain text & Markdown (.txt, .md, .text, .markdown)
+    - PDF documents (.pdf)
+    - Word documents (.docx, .doc)
+    - Genomic data (.fasta, .fa, .fna, .seq, .sam, .vcf)
+    - Structured data (.csv, .tsv, .json)
+    """
+    logger.info("Document upload received: filename='%s', content_type='%s'", file.filename, file.content_type)
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty."
+            )
+
+        text, file_type, char_count = extract_text_from_file(file.filename or "unknown.txt", content)
+        if not text:
+            logger.warning("No readable text could be extracted from '%s'", file.filename)
+            return DocumentUploadResponse(
+                filename=file.filename or "unknown",
+                file_type=file_type,
+                text="",
+                character_count=0,
+                message=f"No text content could be extracted from {file.filename}."
+            )
+
+        logger.info(
+            "Document parsed successfully: %s (%s, %d characters)",
+            file.filename,
+            file_type,
+            char_count,
+        )
+        return DocumentUploadResponse(
+            filename=file.filename or "unknown",
+            file_type=file_type,
+            text=text,
+            character_count=char_count,
+            message=f"Successfully extracted {char_count:,} characters from {file.filename} ({file_type.upper()})."
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to parse uploaded document: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to process document {file.filename}: {str(exc)}"
+        )
 
 
 @app.post("/extract", response_model=ExtractionResponse, tags=["Extraction"])

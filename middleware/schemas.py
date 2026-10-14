@@ -142,3 +142,13 @@ class ExtractAndAlignResponse(BaseModel):
     status: Literal["success", "abstained", "rejected", "error"]
     extraction: ExtractionResponse
     alignment: Optional[AlignmentResponse] = None
+
+
+class DocumentUploadResponse(BaseModel):
+    """Response returned upon uploading an arbitrary document file."""
+    filename: str
+    file_type: str
+    text: str
+    character_count: int
+    message: str = "Document parsed successfully."
+

@@ -12,6 +12,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      '/upload-document': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/health': {
         target: 'http://localhost:8000',
         changeOrigin: true,

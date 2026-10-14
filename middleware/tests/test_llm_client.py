@@ -139,17 +139,19 @@ class TestScoutAndCriticWithGemma4(unittest.TestCase):
         critic = ContextCritic()
         self.assertEqual(critic.client.model, "gemma4:31b")
 
-    def test_critic_deterministic_fallback_when_ollama_fails(self):
+    @patch("middleware.llm_client.OllamaClient.generate", return_value=None)
+    def test_critic_deterministic_fallback_when_ollama_fails(self, mock_gen):
         critic = ContextCritic()
-        # Even with no Ollama server running, deterministic evaluation succeeds
+        # When Ollama fails or returns None, deterministic evaluation succeeds
         doc = "Observed sequence: ACGTACGT reference: TGCATGCA"
         ok, reason = critic.evaluate_with_llm(doc, 19, 27, "observed_sequence")
         self.assertTrue(ok)
         self.assertIn("positive field marker", reason.lower())
 
-    def test_scout_deterministic_fallback_when_ollama_fails(self):
+    @patch("middleware.llm_client.OllamaClient.generate", return_value=None)
+    def test_scout_deterministic_fallback_when_ollama_fails(self, mock_gen):
         scout = ScoutAgent()
-        # Even with no Ollama server running, deterministic regex succeeds
+        # When Ollama fails or returns None, deterministic regex succeeds
         doc = "Observed sequence: ACGTACGTACGT"
         proposal = scout.propose_with_llm(doc, "observed_sequence")
         self.assertIsNotNone(proposal)
