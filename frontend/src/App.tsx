@@ -22,7 +22,17 @@ function App() {
   const [page, setPage] = useState<NavPage>('dashboard');
   const [lastScenarioId, setLastScenarioId] = useState<string | null>(null);
 
-  const { result, loading, errors, pipelineState, run, runScenario } = useHelixGuard();
+  const {
+    result,
+    loading,
+    errors,
+    pipelineState,
+    run,
+    runScenario,
+    isLiveMode,
+    setLiveMode,
+    backendReachable,
+  } = useHelixGuard();
 
   const meta = PAGE_META[page];
 
@@ -49,6 +59,9 @@ function App() {
           title={meta.title}
           description={meta.description}
           onLoadSample={page === 'extraction' || page === 'dashboard' ? handleLoadSample : undefined}
+          isLiveMode={isLiveMode}
+          onToggleMode={setLiveMode}
+          backendReachable={backendReachable}
         />
 
         <main

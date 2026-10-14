@@ -1,13 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   ExtractionRequest,
   HelixGuardApiResponse,
   PipelineState,
 } from '../types/helixguard';
 import { mockHelixGuardApi } from '../services/mockHelixguardApi';
-
-const useMock = import.meta.env.VITE_USE_MOCK_API !== 'false';
-const api = useMock ? mockHelixGuardApi : mockHelixGuardApi; // swap for real api when available
+import { realHelixGuardApi } from '../services/realHelixguardApi';
 
 export type HelixGuardError = { message: string; field?: string };
 
@@ -16,6 +14,8 @@ interface UseHelixGuardState {
   loading: boolean;
   errors: HelixGuardError[];
   pipelineState: PipelineState;
+  isLiveMode: boolean;
+  backendReachable: boolean;
 }
 
 const idlePipeline: PipelineState = {
@@ -24,12 +24,37 @@ const idlePipeline: PipelineState = {
 };
 
 export function useHelixGuard() {
+  const initialLive = import.meta.env.VITE_USE_MOCK_API !== 'true';
+
   const [state, setState] = useState<UseHelixGuardState>({
     result: null,
     loading: false,
     errors: [],
     pipelineState: idlePipeline,
+    isLiveMode: initialLive,
+    backendReachable: false,
   });
+
+  // Check backend health periodically
+  useEffect(() => {
+    let mounted = true;
+    const checkHealth = async () => {
+      const ok = await realHelixGuardApi.isAvailable();
+      if (mounted) {
+        setState((s) => ({ ...s, backendReachable: ok }));
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const setLiveMode = useCallback((live: boolean) => {
+    setState((s) => ({ ...s, isLiveMode: live }));
+  }, []);
 
   const validate = (req: ExtractionRequest): HelixGuardError[] => {
     const errs: HelixGuardError[] = [];
@@ -45,39 +70,51 @@ export function useHelixGuard() {
       return;
     }
     setState((s) => ({ ...s, loading: true, errors: [], result: null }));
+
+    const api = state.isLiveMode ? realHelixGuardApi : mockHelixGuardApi;
+
     try {
       const res = await api.runExtraction(req);
-      setState({ loading: false, errors: [], result: res, pipelineState: res.pipelineState });
-    } catch (e) {
+      setState((s) => ({ ...s, loading: false, errors: [], result: res, pipelineState: res.pipelineState }));
+    } catch (e: any) {
+      const msg = e?.message || String(e);
       setState((s) => ({
         ...s,
         loading: false,
-        errors: [{ message: String(e) }],
+        errors: [{ message: `Backend error: ${msg}. You can toggle to Demo Mode to test offline scenarios.` }],
       }));
     }
-  }, []);
+  }, [state.isLiveMode]);
 
   const runScenario = useCallback(async (scenarioId: string) => {
     setState((s) => ({ ...s, loading: true, errors: [], result: null }));
+    const api = state.isLiveMode ? realHelixGuardApi : mockHelixGuardApi;
     try {
       const res = await api.runScenario(scenarioId);
-      setState({ loading: false, errors: [], result: res, pipelineState: res.pipelineState });
-    } catch (e) {
+      setState((s) => ({ ...s, loading: false, errors: [], result: res, pipelineState: res.pipelineState }));
+    } catch (e: any) {
       setState((s) => ({
         ...s,
         loading: false,
-        errors: [{ message: String(e) }],
+        errors: [{ message: String(e?.message || e) }],
       }));
     }
-  }, []);
+  }, [state.isLiveMode]);
 
   const reset = useCallback(() => {
-    setState({ result: null, loading: false, errors: [], pipelineState: idlePipeline });
+    setState((s) => ({ ...s, result: null, loading: false, errors: [], pipelineState: idlePipeline }));
   }, []);
 
   const clearErrors = useCallback(() => {
     setState((s) => ({ ...s, errors: [] }));
   }, []);
 
-  return { ...state, run, runScenario, reset, clearErrors };
+  return {
+    ...state,
+    setLiveMode,
+    run,
+    runScenario,
+    reset,
+    clearErrors,
+  };
 }

@@ -153,9 +153,12 @@ export function AlignmentMatrix({ result }: Props) {
               <table className="text-[10px] font-mono border-collapse w-full" aria-label="Smith-Waterman DP matrix">
                 <thead>
                   <tr>
-                    {refChars.map((ch, j) => (
-                      <th key={j} scope="col" className="px-2 py-1 text-slate-500 border border-slate-200 bg-slate-50 font-semibold sticky top-0">
-                        {j === 0 ? '' : ch}
+                    <th scope="col" className="px-2 py-1 text-slate-400 border border-slate-200 bg-slate-50 font-semibold sticky top-0 left-0 z-20">
+                      REF \ QRY
+                    </th>
+                    {queryChars.map((ch, j) => (
+                      <th key={j} scope="col" className="px-2 py-1 text-slate-600 border border-slate-200 bg-slate-50 font-semibold sticky top-0 z-10">
+                        {j === 0 ? '—' : ch}
                       </th>
                     ))}
                   </tr>
@@ -163,15 +166,15 @@ export function AlignmentMatrix({ result }: Props) {
                 <tbody>
                   {dpMatrix.map((row, i) => (
                     <tr key={i}>
-                      <th scope="row" className="px-2 py-1 text-slate-500 border border-slate-200 bg-slate-50 font-semibold sticky left-0">
-                        {i === 0 ? '' : queryChars[i]}
+                      <th scope="row" className="px-2 py-1 text-slate-600 border border-slate-200 bg-slate-50 font-semibold sticky left-0 z-10">
+                        {i === 0 ? '—' : (refChars[i] ?? '')}
                       </th>
                       {row.map((val, j) => {
                         const isMax = i === maxScoringCell.row && j === maxScoringCell.col;
                         return (
                           <td
                             key={j}
-                            className={`px-2 py-1 text-center border border-slate-100 ${isMax ? 'ring-2 ring-inset ring-emerald-500' : ''}`}
+                            className={`px-2 py-1 text-center border border-slate-100 ${isMax ? 'ring-2 ring-inset ring-emerald-500 font-bold bg-emerald-50 text-emerald-800' : ''}`}
                             aria-label={`Row ${i}, col ${j}: ${val}`}
                           >
                             {val}
@@ -188,9 +191,12 @@ export function AlignmentMatrix({ result }: Props) {
                 <table className="border-collapse" aria-hidden="true">
                   <thead>
                     <tr>
-                      {refChars.map((ch, j) => (
-                        <th key={j} className="px-1 py-0.5 text-[9px] text-slate-400 font-semibold min-w-[28px] sticky top-0 bg-white border-b border-slate-200">
-                          {j === 0 ? '' : ch}
+                      <th className="px-1 py-0.5 text-[8px] text-slate-400 font-semibold sticky top-0 left-0 bg-white border-b border-r border-slate-200 z-20">
+                        R\Q
+                      </th>
+                      {queryChars.map((ch, j) => (
+                        <th key={j} className="px-1 py-0.5 text-[9px] text-slate-600 font-semibold min-w-[28px] sticky top-0 bg-white border-b border-slate-200 z-10">
+                          {j === 0 ? '—' : ch}
                         </th>
                       ))}
                     </tr>
@@ -198,8 +204,8 @@ export function AlignmentMatrix({ result }: Props) {
                   <tbody>
                     {dpMatrix.map((row, i) => (
                       <tr key={i}>
-                        <td className="px-1 py-0.5 text-[9px] text-slate-400 font-semibold sticky left-0 bg-white border-r border-slate-200 min-w-[20px]">
-                          {i === 0 ? '' : queryChars[i]}
+                        <td className="px-1 py-0.5 text-[9px] text-slate-600 font-semibold sticky left-0 bg-white border-r border-slate-200 min-w-[20px] z-10">
+                          {i === 0 ? '—' : (refChars[i] ?? '')}
                         </td>
                         {row.map((val, j) => {
                           const isMax = i === maxScoringCell.row && j === maxScoringCell.col;
@@ -210,7 +216,7 @@ export function AlignmentMatrix({ result }: Props) {
                               key={j}
                               style={{ background: bg, color, outline: isMax ? '2px solid #16a34a' : 'none', outlineOffset: '-1px' }}
                               className="text-center text-[9px] font-mono font-medium w-7 h-6 border border-slate-100"
-                              title={`[${i},${j}] = ${val}${isMax ? ' (max)' : ''}`}
+                              title={`[Ref ${i}, Qry ${j}] = ${val}${isMax ? ' (max)' : ''}`}
                             >
                               {val}
                             </td>

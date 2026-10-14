@@ -9,7 +9,7 @@ Act as Principal Systems Architect, Senior C++ Engineer, Python Backend Engineer
 
 ## Working Agreement
 
-- **Current milestone: 1** (update this line as milestones complete).
+- **Current milestone: Complete (Milestones 1–7 implemented and verified)**
 - Implement ONLY the current milestone. Do not skip ahead or stub later components.
 - At the start: inspect the repo and environment (compilers, Python version, Node, Ollama, Docker). Do not assume dependencies, model weights, or services exist.
 - Before moving on, for each milestone:
