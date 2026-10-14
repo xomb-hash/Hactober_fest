@@ -148,18 +148,41 @@ export class RealHelixGuardApi implements IHelixGuardApi {
     };
 
     const topMatch = ident?.closest_match;
-    const alignmentResult: AlignmentResult = {
-      referenceSequence: topMatch ? `[${topMatch.accession}] ${topMatch.organism}` : 'RefSeq Viral Database',
-      querySequence: ext.sequence || '',
-      alignedReference: topMatch ? `bp ${topMatch.target_start}–${topMatch.target_end}` : '',
-      alignedQuery: ext.sequence || '',
-      alignmentScore: topMatch?.alignment_score || 0,
-      maxScoringCell: { row: 0, col: 0, value: topMatch?.alignment_score || 0 },
-      dpMatrix: [],
-      scoringParams: { match: 2, mismatch: -1, gap: -1 },
-      skipped: !topMatch || ident?.abstain,
-      skipReason: ident?.abstain_reason || undefined,
-    };
+    const align = data.alignment;
+
+    let alignmentResult: AlignmentResult;
+    if (align && (align.status === 'success' || (align.matrix && align.matrix.length > 0))) {
+      const scoring = align.scoring || { match: 2, mismatch: -1, gap: -1 };
+      const tb = align.traceback || {};
+      const maxRow = align.max_cell?.row ?? 0;
+      const maxCol = align.max_cell?.column ?? align.max_cell?.col ?? 0;
+
+      alignmentResult = {
+        referenceSequence: align.reference_sequence || (topMatch ? `[${topMatch.accession}] ${topMatch.organism} (bp ${topMatch.target_start}–${topMatch.target_end})` : 'RefSeq Viral Target Window'),
+        querySequence: ext.sequence || '',
+        alignedReference: tb.aligned_reference || align.reference_sequence || (topMatch ? `bp ${topMatch.target_start}–${topMatch.target_end}` : ''),
+        alignedQuery: tb.aligned_query || ext.sequence || '',
+        alignmentScore: align.alignment_score ?? topMatch?.alignment_score ?? 0,
+        maxScoringCell: { row: maxRow, col: maxCol, value: align.alignment_score ?? topMatch?.alignment_score ?? 0 },
+        dpMatrix: align.matrix || [],
+        scoringParams: scoring,
+        skipped: false,
+        referenceOrganism: align.reference_organism || (topMatch ? `[${topMatch.accession}] ${topMatch.organism}` : undefined),
+      };
+    } else {
+      alignmentResult = {
+        referenceSequence: topMatch ? `[${topMatch.accession}] ${topMatch.organism}` : 'RefSeq Viral Database',
+        querySequence: ext.sequence || '',
+        alignedReference: topMatch ? `bp ${topMatch.target_start}–${topMatch.target_end}` : '',
+        alignedQuery: ext.sequence || '',
+        alignmentScore: topMatch?.alignment_score || 0,
+        maxScoringCell: { row: 0, col: 0, value: topMatch?.alignment_score || 0 },
+        dpMatrix: [],
+        scoringParams: { match: 2, mismatch: -1, gap: -1 },
+        skipped: !topMatch || ident?.abstain,
+        skipReason: ident?.abstain_reason || undefined,
+      };
+    }
 
     const isSuccess = ext.validation_status === 'verified';
     const isAbstained = extractionStatus === 'abstained' || ident?.abstain;

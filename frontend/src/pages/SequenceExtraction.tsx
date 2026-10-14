@@ -3,6 +3,7 @@ import { DocumentInput } from '../components/DocumentInput';
 import { ExtractionEvidence } from '../components/ExtractionEvidence';
 import { AnchorRecoveryInspector } from '../components/AnchorRecoveryInspector';
 import { GenomeIdentificationCard } from '../components/GenomeIdentificationCard';
+import { AlignmentMatrix } from '../components/AlignmentMatrix';
 import { PipelineStepper } from '../components/PipelineStepper';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 import type { ExtractionRequest, PipelineState } from '../types/helixguard';
@@ -58,6 +59,10 @@ export function SequenceExtraction({
         <div className="space-y-4">
           {result?.genomeIdentification && (
             <GenomeIdentificationCard identification={result.genomeIdentification} />
+          )}
+
+          {result?.alignmentResult && !result.alignmentResult.skipped && result.alignmentResult.dpMatrix && result.alignmentResult.dpMatrix.length > 0 && (
+            <AlignmentMatrix result={result.alignmentResult} />
           )}
 
           {result ? (

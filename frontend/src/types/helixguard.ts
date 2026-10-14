@@ -79,6 +79,7 @@ export interface AlignmentResult {
   scoringParams: ScoringParams;
   skipped: boolean;
   skipReason?: string;
+  referenceOrganism?: string;
 }
 
 // ─── Pipeline State ───────────────────────────────────────────────────────────

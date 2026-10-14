@@ -251,4 +251,5 @@ class ExtractAndIdentifyResponse(BaseModel):
     identification: Optional[GenomeIdentificationResponse] = None
     closest_organism: Optional[str] = None
     closest_accession: Optional[str] = None
+    alignment: Optional[dict] = None
 

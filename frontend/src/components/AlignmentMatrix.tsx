@@ -51,8 +51,15 @@ export function AlignmentMatrix({ result }: Props) {
 
   return (
     <div className="card">
-      <div className="card-header">
-        <span className="card-title">Smith–Waterman Alignment</span>
+      <div className="card-header flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="card-title">Smith–Waterman Alignment</span>
+          {result.referenceOrganism && (
+            <span className="text-[10px] bg-purple-100 text-purple-800 font-mono px-2 py-0.5 rounded font-medium truncate max-w-sm" title={result.referenceOrganism}>
+              {result.referenceOrganism}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 font-mono">
             match {scoringParams.match > 0 ? '+' : ''}{scoringParams.match} / 

@@ -405,12 +405,50 @@ async def extract_and_identify_endpoint(req: ExtractAndIdentifyRequest) -> Extra
     closest_org = ident_resp.closest_match.organism if ident_resp.closest_match else None
     closest_acc = ident_resp.closest_match.accession if ident_resp.closest_match else None
 
+    # Perform detailed C++ Smith-Waterman alignment on closest matched region to produce the heatmap matrix!
+    alignment_dict = None
+    if ident_resp.closest_match and not ident_resp.abstain:
+        try:
+            winner_rec = db.records_by_accession.get(closest_acc)
+            if winner_rec:
+                q_seq = extraction_resp.sequence
+                best_pos = -1
+                for i in range(len(q_seq) - 13 + 1):
+                    km = q_seq[i : i + 13]
+                    p = winner_rec.sequence.find(km)
+                    if p != -1:
+                        best_pos = p - i
+                        break
+                if best_pos == -1:
+                    best_pos = ident_resp.closest_match.target_start
+
+                t_start = max(0, best_pos - 8)
+                t_end = min(len(winner_rec.sequence), best_pos + len(q_seq) + 8)
+                ref_subseq = winner_rec.sequence[t_start:t_end]
+
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    eng_resp = await client.post(
+                        f"{ENGINE_URL}/align",
+                        json={
+                            "reference_sequence": ref_subseq,
+                            "query_sequence": q_seq,
+                            "scoring": {"match": 2, "mismatch": -1, "gap": -1}
+                        }
+                    )
+                    if eng_resp.status_code == 200:
+                        alignment_dict = eng_resp.json()
+                        alignment_dict["reference_sequence"] = ref_subseq
+                        alignment_dict["reference_organism"] = f"[{closest_acc}] {closest_org}"
+        except Exception as exc:
+            logger.warning("Could not execute detailed C++ alignment for heatmap: %s", exc)
+
     return ExtractAndIdentifyResponse(
         status=ident_resp.status,
         extraction=extraction_resp,
         identification=ident_resp,
         closest_organism=closest_org,
         closest_accession=closest_acc,
+        alignment=alignment_dict,
     )
 
 
