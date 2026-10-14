@@ -73,6 +73,33 @@ class TestDocumentParser(unittest.TestCase):
         self.assertEqual(text, "")
 
 
+    def test_image_ocr_png_extraction(self):
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (600, 100), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((20, 30), "Observed sequence: ATCGTTCGACTG", fill=(0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        text, ftype, length = extract_text_from_file("scan.png", buf.getvalue())
+        self.assertEqual(ftype, "image_ocr")
+        self.assertTrue(length > 0)
+        self.assertIn("ATCG", text)
+
+    def test_image_ocr_jpeg_extraction(self):
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (500, 100), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((20, 30), "Reference sequence: ATCGATCG", fill=(0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+
+        text, ftype, length = extract_text_from_file("report.jpg", buf.getvalue())
+        self.assertEqual(ftype, "image_ocr")
+        self.assertTrue(length > 0)
+        self.assertIn("ATCGATCG", text)
+
+
 class TestUploadDocumentEndpoint(unittest.TestCase):
     def test_upload_markdown_file(self):
         content = b"# Lab Note\nObserved sequence: ATCGTTCG\n"
@@ -98,9 +125,29 @@ class TestUploadDocumentEndpoint(unittest.TestCase):
         self.assertEqual(data["file_type"], "docx")
         self.assertIn("Tumor sample sequence: ATCGATCG", data["text"])
 
+    def test_upload_image_file_with_local_ocr(self):
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (600, 100), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((20, 30), "Observed sequence: ATCGTTCGACTG", fill=(0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        resp = client.post(
+            "/upload-document",
+            files={"file": ("gel_report.png", buf.getvalue(), "image/png")}
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["filename"], "gel_report.png")
+        self.assertEqual(data["file_type"], "image_ocr")
+        self.assertIn("ATCG", data["text"])
+        self.assertIn("RapidOCR", data["message"])
+
     def test_upload_empty_file_fails(self):
         resp = client.post(
             "/upload-document",
             files={"file": ("empty.txt", b"", "text/plain")}
         )
         self.assertEqual(resp.status_code, 400)
+

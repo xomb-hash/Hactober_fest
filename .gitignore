@@ -45,3 +45,6 @@ Thumbs.db
 .env
 !.env.example
 frontend/.env.local
+
+# Sample genomic files
+*.fna

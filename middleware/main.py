@@ -87,9 +87,10 @@ async def health_check():
 async def upload_document_endpoint(file: UploadFile = File(...)) -> DocumentUploadResponse:
     """
     Parses and extracts raw text from uploaded files:
-    - Plain text & Markdown (.txt, .md, .text, .markdown)
-    - PDF documents (.pdf)
+    - Images (.png, .jpg, .jpeg, .webp, .tiff, .bmp) via Local RapidOCR ONNX model
+    - PDF documents (.pdf) with scanned image OCR fallback
     - Word documents (.docx, .doc)
+    - Plain text & Markdown (.txt, .md, .text, .markdown)
     - Genomic data (.fasta, .fa, .fna, .seq, .sam, .vcf)
     - Structured data (.csv, .tsv, .json)
     """
@@ -119,12 +120,13 @@ async def upload_document_endpoint(file: UploadFile = File(...)) -> DocumentUplo
             file_type,
             char_count,
         )
+        engine_label = "Local RapidOCR" if file_type == "image_ocr" else file_type.upper()
         return DocumentUploadResponse(
             filename=file.filename or "unknown",
             file_type=file_type,
             text=text,
             character_count=char_count,
-            message=f"Successfully extracted {char_count:,} characters from {file.filename} ({file_type.upper()})."
+            message=f"Successfully extracted {char_count:,} characters from {file.filename} ({engine_label})."
         )
     except HTTPException:
         raise

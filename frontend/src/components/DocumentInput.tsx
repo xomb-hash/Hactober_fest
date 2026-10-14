@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
 import type { ExtractionRequest } from '../types/helixguard';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 
@@ -30,6 +30,7 @@ const FIELD_OPTIONS = [
 const ACCEPTED_FILE_EXTENSIONS = [
   '.txt', '.text', '.md', '.markdown',
   '.pdf', '.docx', '.doc',
+  '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp',
   '.fasta', '.fa', '.fna', '.seq',
   '.sam', '.vcf', '.csv', '.tsv', '.json',
 ].join(',');
@@ -60,6 +61,7 @@ export function DocumentInput({
   const [uploadedFile, setUploadedFile] = useState<UploadedFileMeta | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (sampleTrigger > 0) {
@@ -69,6 +71,10 @@ export function DocumentInput({
       setAlphabet('DNA');
       setUploadedFile(null);
       setUploadError(null);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
     }
   }, [sampleTrigger]);
 
@@ -79,6 +85,10 @@ export function DocumentInput({
     setAlphabet('DNA');
     setUploadedFile(null);
     setUploadError(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
     onLoadSample();
   };
 
@@ -86,6 +96,10 @@ export function DocumentInput({
     setDocumentText('');
     setUploadedFile(null);
     setUploadError(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
   };
 
   const processFile = async (file: File) => {
@@ -93,6 +107,21 @@ export function DocumentInput({
     setIsUploading(true);
 
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    const isImageFormat = [
+      '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.tif', '.bmp',
+    ].includes(ext) || file.type.startsWith('image/');
+
+    if (isImageFormat) {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      const preview = URL.createObjectURL(file);
+      setImagePreviewUrl(preview);
+    } else {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
+    }
+
     const isTextFormat = [
       '.txt', '.text', '.md', '.markdown', '.fasta', '.fa',
       '.fna', '.seq', '.sam', '.vcf', '.csv', '.tsv', '.json',
@@ -121,7 +150,7 @@ export function DocumentInput({
       return;
     }
 
-    // 2. Binary / Complex formats (.pdf, .docx, .doc): call backend upload-document API
+    // 2. Binary / Images / PDF / DOCX: call backend upload-document API
     const formData = new FormData();
     formData.append('file', file);
 
@@ -149,15 +178,16 @@ export function DocumentInput({
       setUploadedFile({
         name: file.name,
         size: formatFileSize(file.size),
-        type: data.file_type.toUpperCase(),
+        type: data.file_type === 'image_ocr' ? 'IMAGE OCR (RapidOCR)' : data.file_type.toUpperCase(),
         characterCount: data.character_count,
       });
     } catch (err: any) {
-      setUploadError(err.message || 'Failed to extract text from document.');
+      setUploadError(err.message || 'Failed to extract text from document or image.');
     } finally {
       setIsUploading(false);
     }
   };
+
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -220,10 +250,10 @@ export function DocumentInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
             className="btn-secondary text-xs flex items-center gap-1.5"
-            title="Upload any document (.pdf, .docx, .md, .txt, .fasta, .sam, .vcf)"
+            title="Upload any document or image (.png, .jpg, .webp, .pdf, .docx, .md, .txt, .fasta)"
           >
             {isUploading ? <Loader2 size={13} className="animate-spin text-accent-600" /> : <Upload size={13} />}
-            {isUploading ? 'Parsing…' : 'Upload document'}
+            {isUploading ? 'OCR Running…' : 'Upload doc / image'}
           </button>
 
           <button
@@ -242,7 +272,7 @@ export function DocumentInput({
             type="button"
             onClick={handleClear}
             className="btn-ghost text-xs"
-            disabled={!documentText && !uploadedFile}
+            disabled={!documentText && !uploadedFile && !imagePreviewUrl}
             title="Clear current text and uploaded file"
           >
             <Trash2 size={13} />
@@ -259,6 +289,41 @@ export function DocumentInput({
             <strong>Demo only.</strong> Use synthetic data. This application does not provide clinical diagnoses or treatment recommendations.
           </p>
         </div>
+
+        {/* Image Preview Banner */}
+        {imagePreviewUrl && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md">
+            <div className="relative flex-shrink-0">
+              <img
+                src={imagePreviewUrl}
+                alt="Source preview"
+                className="h-14 w-20 object-contain rounded border border-slate-300 bg-white p-0.5 shadow-xs"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                <ImageIcon size={14} className="text-accent-600" />
+                <span>Image Scan Uploaded</span>
+                <span className="text-[10px] bg-accent-100 text-accent-700 px-1.5 py-0.5 rounded font-mono font-normal">
+                  RapidOCR ONNX Local
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                Text recognized locally. Review the transcribed report in the field below before extraction.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                URL.revokeObjectURL(imagePreviewUrl);
+                setImagePreviewUrl(null);
+              }}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              title="Close image thumbnail"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Upload feedback badge */}
         {uploadedFile && (
@@ -304,7 +369,7 @@ export function DocumentInput({
               Report text
             </label>
             <span className="text-[11px] text-slate-400">
-              Drag &amp; drop PDF, DOCX, MD, TXT, or FASTA files here
+              Drag &amp; drop image (.png, .jpg), PDF, DOCX, MD, TXT, or FASTA files here
             </span>
           </div>
 
@@ -320,7 +385,7 @@ export function DocumentInput({
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-accent-50/90 rounded-md border-2 border-dashed border-accent-400 pointer-events-none">
                 <Upload size={24} className="text-accent-600 animate-bounce mb-1" />
                 <span className="text-xs font-semibold text-accent-800">
-                  Drop file here to extract text (.pdf, .docx, .md, .txt, .fasta)
+                  Drop file here to extract text (images, .pdf, .docx, .md, .fasta)
                 </span>
               </div>
             )}
@@ -333,10 +398,11 @@ export function DocumentInput({
               className={`input resize-y font-mono text-xs ${
                 docErr ? 'border-red-400 focus:ring-red-500' : ''
               }`}
-              placeholder="Paste a sequencing report or click 'Upload document' above (supports .pdf, .docx, .md, .txt, .fasta)..."
+              placeholder="Paste a sequencing report or upload image/document (supports .png, .jpg, .pdf, .docx, .md, .txt, .fasta)..."
               aria-describedby={docErr ? 'doc-error' : undefined}
             />
           </div>
+
 
           <div className="flex items-center justify-between mt-1">
             <span className="text-[10px] text-slate-400">
