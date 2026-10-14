@@ -76,11 +76,26 @@ class OllamaClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         key_pool: Optional[OllamaKeyPool] = None,
-        timeout_seconds: float = 5.0,
+        timeout_seconds: float = 8.0,
     ) -> None:
-        self.base_url = (base_url or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
-        self.model = model or os.getenv("OLLAMA_MODEL", "gemma4:31b")
         self.key_pool = key_pool or OllamaKeyPool()
+        
+        # When keys are provided, default to Ollama Cloud (https://ollama.com).
+        # Otherwise, default to local daemon.
+        if base_url:
+            raw_url = base_url
+        elif os.getenv("OLLAMA_URL"):
+            raw_url = os.environ["OLLAMA_URL"]
+        else:
+            if self.key_pool.has_keys:
+                raw_url = "https://ollama.com"
+            elif os.path.exists("/.dockerenv"):
+                raw_url = "http://host.docker.internal:11434"
+            else:
+                raw_url = "http://localhost:11434"
+
+        self.base_url = raw_url.rstrip("/")
+        self.model = model or os.getenv("OLLAMA_MODEL", "gemma4:31b")
         self.timeout_seconds = timeout_seconds
 
     def generate(
@@ -104,6 +119,8 @@ class OllamaClient:
         if format_json:
             payload["format"] = "json"
 
+        endpoint = f"{self.base_url}/generate" if self.base_url.endswith("/api") else f"{self.base_url}/api/generate"
+
         for attempt in range(attempts):
             current_key = self.key_pool.get_current_key()
             headers = self.key_pool.get_headers(current_key)
@@ -111,7 +128,7 @@ class OllamaClient:
             try:
                 with httpx.Client(timeout=effective_timeout) as client:
                     resp = client.post(
-                        f"{self.base_url}/api/generate",
+                        endpoint,
                         json=payload,
                         headers=headers,
                     )

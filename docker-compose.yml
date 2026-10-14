@@ -20,7 +20,7 @@ services:
       - "8000:8000"
     environment:
       - ENGINE_URL=http://engine:8080
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OLLAMA_URL=${OLLAMA_URL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:31b}
       - OLLAMA_API_KEYS=${OLLAMA_API_KEYS:-}
       - LOG_LEVEL=INFO
