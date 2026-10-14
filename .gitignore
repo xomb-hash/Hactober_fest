@@ -1,10 +1,47 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
+.venv/
+.pytest_cache/
 
-# Virtual environments
-.venv
+# Node & Frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+.npm
+
+# C++ & MSVC Build Artifacts
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+engine/build/
+engine/test_alignment.exe
+engine/test_min.*
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+!.env.example
+frontend/.env.local

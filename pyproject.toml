@@ -1,12 +1,12 @@
 [project]
 name = "hactober-fest"
 version = "0.1.0"
-description = "Add your description here"
+description = "HelixGuard: Verification-first genomic sequence extraction and alignment system"
 readme = "README.md"
 authors = [
     { name = "Adnayian Sami Ahmed", email = "adnayian15@gmail.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
@@ -15,3 +15,8 @@ hactober-fest = "hactober_fest:main"
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["middleware/tests", "tests"]
+asyncio_mode = "strict"

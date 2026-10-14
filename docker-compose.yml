@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: helixguard-engine
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+    restart: unless-stopped
+
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile
+    container_name: helixguard-middleware
+    ports:
+      - "8000:8000"
+    environment:
+      - ENGINE_URL=http://engine:8080
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5:7b
+      - LOG_LEVEL=INFO
+    depends_on:
+      - engine
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: helixguard-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_USE_MOCK_API=false
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - middleware
+    restart: unless-stopped

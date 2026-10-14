@@ -1,0 +1,12 @@
+build
+*.obj
+*.exe
+*.lib
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.sln
+*.slnx
+*.vcxproj*
+.vs
