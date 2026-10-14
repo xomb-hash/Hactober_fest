@@ -20,6 +20,7 @@ import httpx
 
 from middleware.critic import ContextCritic
 from middleware.llm_client import OllamaClient, default_llm_client
+from middleware.masking import mask_document_for_llm, dereference_token, MaskedDocument
 
 logger = logging.getLogger("helixguard.scout")
 
@@ -128,7 +129,7 @@ class ScoutAgent:
 
         return None
 
-    def propose_with_llm(
+    def propose_with_token_mask(
         self,
         document_text: str,
         field_type: str = "observed_sequence",
@@ -136,9 +137,75 @@ class ScoutAgent:
         previous_failure: Optional[str] = None
     ) -> Optional[ScoutProposal]:
         """
-        Queries Ollama to propose a candidate excerpt and anchors.
-        Fails safely and falls back to deterministic proposal.
+        Privacy-preserving token-masked Scout localization (Round 2 Hardening).
+        Replaces all nucleotides and patient IDs with tokens so the LLM NEVER sees bases.
+        The LLM only identifies WHICH token matches the requested field.
         """
+        masked_doc = mask_document_for_llm(document_text, alphabet=alphabet)
+        if not masked_doc.tokens:
+            logger.info("No sequence tokens detected during masking, falling back to deterministic.")
+            return None
+
+        token_list_str = ", ".join(f"'{t.token}'" for t in masked_doc.tokens)
+
+        prompt = (
+            f"You are the Scout agent for privacy-preserving genomic document analysis.\n"
+            f"All nucleotide sequences and patient identifiers in the document have been tokenized for security.\n"
+            f"Available sequence tokens: [{token_list_str}].\n"
+            f"Task: Identify which sequence token belongs to field '{field_type}' based strictly on the surrounding context.\n"
+            f"RULES:\n"
+            f"1. Choose ONLY from the available sequence tokens: [{token_list_str}].\n"
+            f"2. Return JSON ONLY with keys:\n"
+            f"   - 'field_type': '{field_type}'\n"
+            f"   - 'selected_token': the token string (e.g. '<SEQ_0, 48 nt>')\n"
+            f"   - 'anchor_before': text immediately preceding the token in the document\n"
+            f"   - 'anchor_after': text immediately following the token in the document\n"
+            f"   - 'expected_alphabet': '{alphabet}'\n"
+            f"   - 'reason': brief explanation of context match\n"
+        )
+        if previous_failure:
+            prompt += f"NOTE: Previous attempt failed with reason: '{previous_failure}'. Propose a DIFFERENT token.\n"
+
+        prompt += f"\nSanitized Document:\n'''\n{masked_doc.masked_text}\n'''\nJSON:"
+
+        try:
+            logger.info("Scout querying LLM in token-masked mode (%d tokens, model=%s)...", len(masked_doc.tokens), self.client.model)
+            response_text = self.client.generate(prompt, format_json=True)
+            if response_text:
+                clean_text = response_text.strip()
+                if clean_text.startswith("```"):
+                    clean_text = re.sub(r"^```[a-zA-Z]*\s*", "", clean_text)
+                    clean_text = re.sub(r"\s*```$", "", clean_text)
+                parsed = json.loads(clean_text)
+
+                selected_token = parsed.get("selected_token") or parsed.get("candidate_quote")
+                if selected_token:
+                    token_info = dereference_token(str(selected_token), masked_doc.token_map)
+                    if token_info:
+                        logger.info("Token-masked Scout resolved token '%s' to %d nt sequence.", token_info.token, token_info.length)
+                        return ScoutProposal(
+                            field_type=parsed.get("field_type", field_type),
+                            candidate_quote=token_info.raw_sequence,
+                            anchor_before=str(parsed.get("anchor_before", "")).strip() or None,
+                            anchor_after=str(parsed.get("anchor_after", "")).strip() or None,
+                            expected_alphabet=parsed.get("expected_alphabet", alphabet),
+                            reason=f"Privacy token-masked scout matched {token_info.token}: {parsed.get('reason', '')}"
+                        )
+                    else:
+                        logger.warning("Scout proposed unknown token '%s', falling back.", selected_token)
+        except Exception as exc:
+            logger.warning("Token-masked LLM query failed (%s). Falling back.", exc)
+
+        return None
+
+    def _propose_with_raw_llm(
+        self,
+        document_text: str,
+        field_type: str = "observed_sequence",
+        alphabet: str = "DNA",
+        previous_failure: Optional[str] = None
+    ) -> Optional[ScoutProposal]:
+        """Legacy quote-based LLM proposal, kept as opt-in fallback."""
         prompt = (
             f"You are the Scout agent for genomic document analysis.\n"
             f"Task: Locate the sequence for field '{field_type}' in the document below.\n"
@@ -174,5 +241,35 @@ class ScoutAgent:
         except Exception as exc:
             logger.warning("Ollama scout request failed or unavailable (%s). Falling back to deterministic proposal.", exc)
 
+        return None
+
+    def propose_with_llm(
+        self,
+        document_text: str,
+        field_type: str = "observed_sequence",
+        alphabet: str = "DNA",
+        previous_failure: Optional[str] = None,
+        use_token_mask: Optional[bool] = None,
+    ) -> Optional[ScoutProposal]:
+        """
+        Queries Ollama to propose a candidate excerpt and anchors.
+        Defaults to privacy-preserving token-masked mode so no raw nucleotides are transmitted.
+        Fails safely and falls back to deterministic proposal.
+        """
+        if use_token_mask is None:
+            # Token mask enabled by default; explicitly forced if cloud endpoint is used
+            use_token_mask = os.getenv("OLLAMA_TOKEN_MASK", "true").lower() in ("true", "1", "yes")
+
+        if use_token_mask:
+            prop = self.propose_with_token_mask(document_text, field_type, alphabet, previous_failure)
+            if prop:
+                return prop
+
+        # Opt-in raw mode if token mask didn't resolve or was disabled
+        raw_prop = self._propose_with_raw_llm(document_text, field_type, alphabet, previous_failure)
+        if raw_prop:
+            return raw_prop
+
         # Fallback to deterministic proposal
         return self.propose_deterministic(document_text, field_type, alphabet, previous_failure)
+

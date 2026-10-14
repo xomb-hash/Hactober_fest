@@ -125,8 +125,14 @@ class ContextCritic:
         # Guard: If Ollama URL is not set or unreachable, use deterministic
         try:
             ctx_start = max(0, span_start - 150)
-            ctx_end = min(len(document_text), span_end + 100)
-            excerpt = document_text[ctx_start:ctx_end]
+            use_token_mask = os.getenv("OLLAMA_TOKEN_MASK", "true").lower() in ("true", "1", "yes")
+            if use_token_mask:
+                pre = document_text[ctx_start:span_start]
+                post = document_text[span_end:ctx_end]
+                seq_len = span_end - span_start
+                excerpt = f"{pre}<SEQ_TARGET, {seq_len} nt>{post}"
+            else:
+                excerpt = document_text[ctx_start:ctx_end]
 
             prompt = (
                 f"You are a genomic document verification critic.\n"
