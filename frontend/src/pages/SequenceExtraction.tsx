@@ -15,6 +15,7 @@ interface Props {
   onRunScenario: (id: string) => void;
   onLoadSample: () => void;
   sampleText: string;
+  sampleTrigger?: number;
 }
 
 export function SequenceExtraction({
@@ -25,6 +26,7 @@ export function SequenceExtraction({
   onRun,
   onRunScenario,
   onLoadSample,
+  sampleTrigger = 0,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -39,6 +41,7 @@ export function SequenceExtraction({
             errors={errors}
             loading={loading}
             initialDocumentText={SAMPLE_REPORT_TEXT}
+            sampleTrigger={sampleTrigger}
           />
           <AnchorRecoveryInspector
             anchorVerification={result?.extractionResult.anchorVerification}

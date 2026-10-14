@@ -46,8 +46,11 @@ function App() {
     runScenario(id);
   }, [runScenario]);
 
+  const [sampleTrigger, setSampleTrigger] = useState(0);
+
   const handleLoadSample = useCallback(() => {
-    // Navigate to extraction page and load sample — handled inside DocumentInput via prop
+    setPage('extraction');
+    setSampleTrigger((prev) => prev + 1);
   }, []);
 
   return (
@@ -58,7 +61,7 @@ function App() {
         <Header
           title={meta.title}
           description={meta.description}
-          onLoadSample={page === 'extraction' || page === 'dashboard' ? handleLoadSample : undefined}
+          onLoadSample={handleLoadSample}
           isLiveMode={isLiveMode}
           onToggleMode={setLiveMode}
           backendReachable={backendReachable}
@@ -81,8 +84,9 @@ function App() {
               errors={errors}
               onRun={handleRun}
               onRunScenario={handleRunScenario}
-              onLoadSample={() => {}} // sample text is loaded via initialDocumentText prop
+              onLoadSample={handleLoadSample}
               sampleText={SAMPLE_REPORT_TEXT}
+              sampleTrigger={sampleTrigger}
             />
           )}
           {page === 'alignment' && (

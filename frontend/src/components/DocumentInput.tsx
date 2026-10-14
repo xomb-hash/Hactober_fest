@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, FileText, Play } from 'lucide-react';
 import type { ExtractionRequest } from '../types/helixguard';
+import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 
 interface Props {
   onRun: (req: ExtractionRequest) => void;
@@ -8,6 +9,7 @@ interface Props {
   errors: { message: string; field?: string }[];
   loading: boolean;
   initialDocumentText?: string;
+  sampleTrigger?: number;
 }
 
 const FIELD_OPTIONS = [
@@ -18,13 +20,33 @@ const FIELD_OPTIONS = [
   'Query sequence',
 ];
 
-export function DocumentInput({ onRun, onLoadSample, errors, loading, initialDocumentText = '' }: Props) {
-  const [documentText, setDocumentText] = useState(initialDocumentText);
+export function DocumentInput({
+  onRun,
+  onLoadSample,
+  errors,
+  loading,
+  initialDocumentText = '',
+  sampleTrigger = 0,
+}: Props) {
+  const [documentText, setDocumentText] = useState(initialDocumentText || SAMPLE_REPORT_TEXT);
   const [referenceSequence, setReferenceSequence] = useState('ATCGATCG');
   const [targetField, setTargetField] = useState('Observed sequence');
   const [alphabet, setAlphabet] = useState<'DNA' | 'RNA'>('DNA');
 
+  useEffect(() => {
+    if (sampleTrigger > 0) {
+      setDocumentText(SAMPLE_REPORT_TEXT);
+      setReferenceSequence('ATCGATCG');
+      setTargetField('Observed sequence');
+      setAlphabet('DNA');
+    }
+  }, [sampleTrigger]);
+
   const handleLoadSample = () => {
+    setDocumentText(SAMPLE_REPORT_TEXT);
+    setReferenceSequence('ATCGATCG');
+    setTargetField('Observed sequence');
+    setAlphabet('DNA');
     onLoadSample();
   };
 
