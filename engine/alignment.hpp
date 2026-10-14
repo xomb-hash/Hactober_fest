@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,7 @@ struct AlignmentResult {
 };
 
 // Direction pointers used during dynamic programming traceback
-enum class TracebackDir : uint8_t {
+enum class TracebackDir : std::uint8_t {
     STOP = 0,
     DIAG = 1,
     UP = 2,
