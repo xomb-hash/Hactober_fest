@@ -1,0 +1,18 @@
+Start testing: Oct 14 10:38 India Standard Time
+----------------------------------------------------------
+1/1 Testing: alignment_unit_tests
+1/1 Test: alignment_unit_tests
+Command: "C:/Users/dell/Desktop/Hactober_fest/engine/build/Release/test_alignment.exe"
+Directory: C:/Users/dell/Desktop/Hactober_fest/engine/build
+"alignment_unit_tests" start time: Oct 14 10:38 India Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Failed.
+"alignment_unit_tests" end time: Oct 14 10:38 India Standard Time
+"alignment_unit_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 14 10:38 India Standard Time
