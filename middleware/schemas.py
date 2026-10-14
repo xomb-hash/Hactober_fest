@@ -28,6 +28,7 @@ class ProvenanceRecord(BaseModel):
     """Comprehensive traceability record for sequence extraction."""
     request_id: Optional[str] = None
     input_hash: str = Field(..., description="SHA-256 hash of the original document_text")
+    input_hmac: Optional[str] = Field(None, description="Salted HMAC-SHA256 for privacy-preserving verification")
     source_span: Optional[SourceSpan] = None
     source_excerpt: Optional[str] = None
     extracted_sequence: Optional[str] = None
@@ -63,6 +64,29 @@ class ProvenanceRecord(BaseModel):
     reason: Optional[str] = None
     timestamp: Optional[str] = None
 
+    def to_redacted_dict(self) -> dict:
+        """Returns a privacy-safe provenance dictionary stripped of raw sequences and excerpts."""
+        return {
+            "request_id": self.request_id,
+            "input_hmac": self.input_hmac or self.input_hash,
+            "source_span": self.source_span.model_dump() if self.source_span else None,
+            "alphabet": self.alphabet,
+            "normalization_ops": self.normalization_ops,
+            "recovery_method": self.recovery_method,
+            "ai_scout_used": self.ai_scout_used,
+            "candidate_located": self.candidate_located,
+            "alphabet_valid": self.alphabet_valid,
+            "boundaries_verified": self.boundaries_verified,
+            "completeness_verified": self.completeness_verified,
+            "source_fidelity_verified": self.source_fidelity_verified,
+            "field_supported": self.field_supported,
+            "eligible_for_alignment": self.eligible_for_alignment,
+            "validation_status": self.validation_status,
+            "final_status": self.final_status,
+            "reason": self.reason,
+            "timestamp": self.timestamp,
+        }
+
 
 class ExtractionRequest(BaseModel):
     """Request payload for deterministic sequence extraction."""
@@ -74,6 +98,8 @@ class ExtractionRequest(BaseModel):
     anchor_after: Optional[str] = Field(None, description="Optional text immediately following candidate")
     allow_iupac: bool = Field(False, description="Whether IUPAC ambiguity codes are accepted")
     use_ai: bool = Field(True, description="Whether to query Ollama Cloud Scout for AI-assisted localization")
+    use_token_mask: Optional[bool] = Field(None, description="Enforce token masking so no nucleotides reach LLM")
+    selected_span: Optional[SourceSpan] = Field(None, description="User-selected span for interactive disambiguation")
 
 
 class ExtractionResponse(BaseModel):
@@ -91,8 +117,12 @@ class ExtractionResponse(BaseModel):
     error_code: Optional[str] = Field(None, description="Error or abstention code")
     message: Optional[str] = Field(None, description="Descriptive human-readable explanation")
     provenance: Optional[ProvenanceRecord] = Field(None, description="Full audit provenance record")
+    redacted_provenance: Optional[dict] = Field(None, description="Privacy-safe provenance stripped of raw sequences")
     scout_proposal: Optional[dict] = Field(None, description="Proposal returned by AI Scout agent")
     critic_evaluation: Optional[str] = Field(None, description="Evaluation returned by Context Critic agent")
+    candidate_spans: Optional[List[dict]] = Field(None, description="Discovered candidate spans for human-in-the-loop disambiguation")
+    format_detected: Optional[str] = Field(None, description="Detected format of document (e.g. fasta, genbank, clinical_report)")
+    plain_language_verdict: Optional[str] = Field(None, description="User-facing plain-language verdict ('Verified' vs 'Not sure')")
 
 
 class MaxCell(BaseModel):
@@ -142,6 +172,8 @@ class ExtractAndAlignRequest(BaseModel):
     anchor_after: Optional[str] = None
     allow_iupac: bool = False
     use_ai: bool = True
+    use_token_mask: Optional[bool] = None
+    selected_span: Optional[SourceSpan] = None
     scoring: Optional[ScoringConfig] = None
 
 
@@ -207,6 +239,8 @@ class ExtractAndIdentifyRequest(BaseModel):
     anchor_after: Optional[str] = None
     allow_iupac: bool = False
     use_ai: bool = True
+    use_token_mask: Optional[bool] = None
+    selected_span: Optional[SourceSpan] = None
     top_k: int = 5
 
 

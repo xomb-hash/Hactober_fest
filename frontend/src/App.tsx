@@ -29,6 +29,7 @@ function App() {
     pipelineState,
     run,
     runScenario,
+    reset,
     isLiveMode,
     setLiveMode,
     backendReachable,
@@ -84,6 +85,7 @@ function App() {
               onRun={handleRun}
               onRunScenario={handleRunScenario}
               onLoadSample={handleLoadSample}
+              onClear={reset}
               sampleText={SAMPLE_REPORT_TEXT}
               sampleTrigger={sampleTrigger}
             />

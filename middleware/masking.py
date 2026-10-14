@@ -43,10 +43,10 @@ NUCLEOTIDE_RUN_REGEX = re.compile(
 
 # Patient identifier patterns (common in clinical / lab reports)
 PATIENT_NAME_REGEX = re.compile(
-    r"(?i)\b(?:Patient(?:\s+Name)?|Patient\s*ID|Subject)\s*:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)"
+    r"(?i)\b(?:Patient(?:\s+Name)?|Patient\s*ID|Subject)[ \t]*:[ \t]*([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*)"
 )
 PATIENT_MRN_REGEX = re.compile(
-    r"(?i)\b(?:MRN|Medical\s*Record\s*(?:Number|#)?|Specimen\s*ID|Case\s*(?:#|No))\s*:\s*([A-Za-z0-9_-]+)"
+    r"(?i)\b(?:MRN|Medical\s*Record\s*(?:Number|#)?|Specimen\s*ID|Case\s*(?:#|No))[ \t]*:[ \t]*([A-Za-z0-9_-]+)"
 )
 
 
@@ -74,19 +74,16 @@ def mask_document_for_llm(
     # Build candidate matches with their original offsets
     valid_chars = set("ACGTacgt \t\n\r") if alphabet.upper() == "DNA" else set("ACGUacgu \t\n\r")
 
-    # We first scan for candidate sequence sections
-    # Look for both explicit field lines (e.g. "Observed sequence: ATCG...") and raw sequence blocks
+    base_chars = "ACGTacgt" if alphabet.upper() == "DNA" else "ACGUacgu"
+    # Match words composed strictly of nucleotides with length >= min_length
+    pattern = re.compile(rf"\b([{base_chars}]{{{min_length},}})\b")
     candidates: List[Tuple[int, int, str]] = []
 
-    # Find contiguous nucleotide-like runs
-    for match in re.finditer(r"\b([A-Za-z\s]{6,})\b", document_text):
-        chunk = match.group(1)
-        # Check if characters are predominantly nucleotides
-        clean_bases = re.sub(r"\s+", "", chunk)
-        if len(clean_bases) >= min_length and all(c in "ACGTUacgtu" for c in clean_bases):
-            candidates.append((match.start(1), match.end(1), clean_bases.upper()))
+    for match in pattern.finditer(document_text):
+        clean_bases = match.group(1).upper()
+        candidates.append((match.start(1), match.end(1), clean_bases))
 
-    # Merge overlapping/adjacent spans and sort
+    # Merge adjacent sequence blocks separated only by spaces/newlines
     sorted_spans = sorted(candidates, key=lambda x: x[0])
     merged_spans: List[Tuple[int, int, str]] = []
     for span in sorted_spans:
@@ -94,9 +91,9 @@ def mask_document_for_llm(
             merged_spans.append(span)
         else:
             prev_start, prev_end, prev_seq = merged_spans[-1]
-            if span[0] <= prev_end:
-                # Overlap: extend
-                new_end = max(prev_end, span[1])
+            gap = document_text[prev_end:span[0]]
+            if span[0] <= prev_end or (gap.isspace() and len(gap) <= 4):
+                new_end = span[1]
                 raw_chunk = document_text[prev_start:new_end]
                 clean = re.sub(r"[^A-Za-z]", "", raw_chunk).upper()
                 merged_spans[-1] = (prev_start, new_end, clean)

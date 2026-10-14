@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles, Image as ImageIcon, Dna } from 'lucide-react';
-import type { ExtractionRequest } from '../types/helixguard';
+import { Trash2, FileText, Play, Upload, FileCheck, X, AlertCircle, Loader2, Sparkles, Image as ImageIcon, Dna, ShieldCheck } from 'lucide-react';
+import type { ExtractionRequest, HelixGuardApiResponse } from '../types/helixguard';
 import { SAMPLE_REPORT_TEXT } from '../services/mockHelixguardApi';
 
 interface Props {
   onRun: (req: ExtractionRequest) => void;
   onLoadSample: () => void;
+  onClear?: () => void;
+  result?: HelixGuardApiResponse | null;
   errors: { message: string; field?: string }[];
   loading: boolean;
   initialDocumentText?: string;
@@ -44,6 +46,8 @@ function formatFileSize(bytes: number): string {
 export function DocumentInput({
   onRun,
   onLoadSample,
+  onClear,
+  result,
   errors,
   loading,
   initialDocumentText = '',
@@ -54,6 +58,7 @@ export function DocumentInput({
   const [targetField, setTargetField] = useState('Observed sequence');
   const [alphabet, setAlphabet] = useState<'DNA' | 'RNA'>('DNA');
   const [useAi, setUseAi] = useState(true);
+  const [useTokenMask, setUseTokenMask] = useState(true);
   const [useDatabase, setUseDatabase] = useState(true);
 
   // File upload state
@@ -101,6 +106,7 @@ export function DocumentInput({
       URL.revokeObjectURL(imagePreviewUrl);
       setImagePreviewUrl(null);
     }
+    onClear?.();
   };
 
   const processFile = async (file: File) => {
@@ -231,17 +237,40 @@ export function DocumentInput({
       alphabet,
       useAi,
       searchDatabase: useDatabase,
+      useTokenMask,
     });
   };
 
+  const handleSelectCandidate = (cand: { start: number; end: number }) => {
+    onRun({
+      documentText,
+      referenceSequence: useDatabase ? 'DATABASE' : referenceSequence,
+      targetField,
+      alphabet,
+      useAi,
+      searchDatabase: useDatabase,
+      useTokenMask,
+      selectedSpan: cand,
+    });
+  };
 
   const docErr = errors.find((e) => e.field === 'documentText');
   const refErr = errors.find((e) => e.field === 'referenceSequence');
 
+  const candidates = result?.extractionResult?.candidateSpans;
+  const isAbstained = result?.extractionResult?.extractionStatus === 'abstained';
+
   return (
     <div className="card">
       <div className="card-header">
-        <span className="card-title">Document Input</span>
+        <div className="flex items-center gap-2">
+          <span className="card-title">Document Input</span>
+          {result?.extractionResult?.formatDetected && result.extractionResult.formatDetected !== 'text' && (
+            <span className="text-[10px] bg-purple-100 text-purple-800 font-mono uppercase px-1.5 py-0.5 rounded border border-purple-200">
+              {result.extractionResult.formatDetected} Adapter
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {/* Hidden file input */}
           <input
@@ -281,16 +310,64 @@ export function DocumentInput({
             type="button"
             onClick={handleClear}
             className="btn-ghost text-xs"
-            disabled={!documentText && !uploadedFile && !imagePreviewUrl}
-            title="Clear current text and uploaded file"
+            disabled={!documentText && !uploadedFile && !imagePreviewUrl && !result}
+            title="Clear all text, uploaded file, and verification results"
           >
             <Trash2 size={13} />
-            Clear
+            Clear All
           </button>
         </div>
       </div>
 
       <div className="card-body space-y-4">
+        {/* Interactive Human-in-the-Loop Disambiguation (R2-2) */}
+        {isAbstained && candidates && candidates.length > 0 && (
+          <div className="p-3 bg-amber-50/90 border border-amber-300 rounded-md space-y-2.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                <AlertCircle size={15} className="text-amber-600 flex-shrink-0" />
+                <span>Interactive Disambiguation — Multiple Candidate Sequences Located</span>
+              </div>
+              <span className="text-[10px] bg-amber-200/80 text-amber-950 font-mono px-2 py-0.5 rounded font-medium">
+                {candidates.length} candidates
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-snug">
+              The automated scout abstained because multiple candidates exist in the source document.
+              <strong> Click on the intended sequence span below</strong> to deterministically verify and align it:
+            </p>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {candidates.map((c, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectCandidate({ start: c.start, end: c.end })}
+                  className="w-full text-left p-2.5 rounded bg-white hover:bg-amber-100/60 border border-amber-200 hover:border-amber-400 transition-all text-xs flex items-center justify-between group shadow-2xs cursor-pointer"
+                >
+                  <div className="min-w-0 flex-1 pr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                        Offsets [{c.start}:{c.end}) ({c.end - c.start} bp)
+                      </span>
+                      {c.label && (
+                        <span className="text-[10px] text-purple-700 font-medium truncate">
+                          {c.label}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-[11px] text-slate-800 truncate mt-1">
+                      {c.preview}…
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-amber-700 font-semibold group-hover:text-amber-900 flex-shrink-0 bg-amber-100/60 group-hover:bg-amber-200 px-2 py-1 rounded border border-amber-200">
+                    Verify this span →
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Demo notice */}
         <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
           <span className="text-amber-600 mt-0.5 flex-shrink-0 text-sm">⚠</span>
@@ -561,6 +638,26 @@ export function DocumentInput({
           </label>
           <span className="text-[11px] font-medium text-purple-700">
             {useAi ? 'Active (Key Pool)' : 'Deterministic Only'}
+          </span>
+        </div>
+
+        {/* R2-1 Privacy Guard / Token-Masked Scout Toggle */}
+        <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/70 border border-emerald-200 rounded-md">
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-800 select-none">
+            <input
+              type="checkbox"
+              id="token-mask-privacy-toggle"
+              checked={useTokenMask}
+              onChange={(e) => setUseTokenMask(e.target.checked)}
+              className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+            />
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <span>Privacy Guard (Token-Masked Scout · LLM never sees nucleotides)</span>
+            </div>
+          </label>
+          <span className="text-[11px] font-medium text-emerald-700">
+            {useTokenMask ? 'Enforced (R2 Privacy)' : 'Raw Fallback'}
           </span>
         </div>
 

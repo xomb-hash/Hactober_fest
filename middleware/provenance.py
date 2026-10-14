@@ -3,6 +3,8 @@ Provenance tracker for sequence extraction in HelixGuard.
 Ensures full auditability, offset tracing back to raw source text, and verification checklist.
 """
 
+import os
+import hmac
 import hashlib
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -18,10 +20,12 @@ class ProvenanceTracker:
         self,
         document_text: str,
         alphabet: str = "DNA",
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
+        salt: Optional[str] = None
     ) -> None:
         self.document_text = document_text
         self.input_hash = self.compute_hash(document_text)
+        self.input_hmac = self.compute_hmac(document_text, salt=salt)
         self.alphabet = alphabet
         self.request_id = request_id
 
@@ -60,6 +64,12 @@ class ProvenanceTracker:
     def compute_hash(text: str) -> str:
         """Computes SHA-256 hash of raw input text."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def compute_hmac(text: str, salt: Optional[str] = None) -> str:
+        """Computes salted HMAC-SHA256 of raw input text to prevent hash inversion or oracle attacks."""
+        key = (salt or os.getenv("HMAC_SALT", "helixguard-deterministic-salt-2026")).encode("utf-8")
+        return hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
     def add_normalization_op(self, op: str) -> None:
         """Records an explicit normalization operation applied during extraction."""
@@ -126,6 +136,7 @@ class ProvenanceTracker:
         return ProvenanceRecord(
             request_id=self.request_id,
             input_hash=self.input_hash,
+            input_hmac=self.input_hmac,
             source_span=self.source_span,
             source_excerpt=self.source_excerpt,
             extracted_sequence=self.extracted_sequence,

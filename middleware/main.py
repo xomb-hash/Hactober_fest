@@ -170,6 +170,8 @@ async def extract_endpoint(req: ExtractionRequest) -> ExtractionResponse:
             anchor_after=req.anchor_after,
             allow_iupac=req.allow_iupac,
             use_ai=req.use_ai,
+            use_token_mask=req.use_token_mask,
+            selected_span=req.selected_span,
         )
         return resp
     except Exception as exc:
@@ -224,6 +226,8 @@ async def extract_and_align_endpoint(req: ExtractAndAlignRequest) -> ExtractAndA
         anchor_after=req.anchor_after,
         allow_iupac=req.allow_iupac,
         use_ai=req.use_ai,
+        use_token_mask=req.use_token_mask,
+        selected_span=req.selected_span,
     )
 
     # 3. CRITICAL GATING: Never send unverified sequence to engine
@@ -361,6 +365,8 @@ async def extract_and_identify_endpoint(req: ExtractAndIdentifyRequest) -> Extra
         anchor_after=req.anchor_after,
         allow_iupac=req.allow_iupac,
         use_ai=req.use_ai,
+        use_token_mask=req.use_token_mask,
+        selected_span=req.selected_span,
     )
 
     # 2. Strict Safety Gating: Unverified sequence never reaches the database
@@ -406,4 +412,30 @@ async def extract_and_identify_endpoint(req: ExtractAndIdentifyRequest) -> Extra
         closest_organism=closest_org,
         closest_accession=closest_acc,
     )
+
+
+@app.post("/export-redacted", tags=["Privacy & Audit"])
+async def export_redacted_provenance_endpoint(req: ExtractionRequest):
+    """
+    Round 2 Privacy Export:
+    Produces a zero-retention, privacy-safe audit record.
+    Strips all raw sequences, candidate quotes, and excerpts,
+    retaining only the salted HMAC, checklist verification flags, offsets, and metadata.
+    """
+    extraction_resp = extract_sequence(
+        document_text=req.document_text,
+        field_type=req.field_type,
+        alphabet=req.sequence_alphabet,
+        candidate_quote=req.candidate_quote,
+        anchor_before=req.anchor_before,
+        anchor_after=req.anchor_after,
+        allow_iupac=req.allow_iupac,
+        use_ai=req.use_ai,
+        use_token_mask=req.use_token_mask,
+        selected_span=req.selected_span,
+    )
+    if extraction_resp.provenance:
+        return extraction_resp.provenance.to_redacted_dict()
+    return {"status": "no_provenance_record"}
+
 

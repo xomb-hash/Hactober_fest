@@ -49,10 +49,15 @@ export interface ExtractionResult {
   sourceFidelityStatus: 'verified' | 'unverified' | 'failed';
   boundaryVerificationStatus: 'verified' | 'failed' | 'skipped';
   completenessStatus: 'complete' | 'truncated' | 'unknown';
-  recoveryMethod: RecoveryStrategy;
+  recoveryMethod: RecoveryStrategy | 'user_disambiguation';
   anchorVerification: AnchorVerification;
   provenance: SourceProvenance;
   validationErrors: string[];
+  candidateSpans?: Array<{ start: number; end: number; preview: string; label?: string }>;
+  redactedProvenance?: any;
+  formatDetected?: string;
+  inputHmac?: string;
+  plainLanguageVerdict?: string;
 }
 
 // ─── Alignment ────────────────────────────────────────────────────────────────
@@ -151,6 +156,8 @@ export interface ExtractionRequest {
   alphabet: 'DNA' | 'RNA';
   useAi?: boolean;
   searchDatabase?: boolean;
+  useTokenMask?: boolean;
+  selectedSpan?: { start: number; end: number };
 }
 
 export interface HelixGuardApiResponse {

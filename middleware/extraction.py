@@ -33,6 +33,7 @@ from middleware.anchor_recovery import (
     check_boundary_integrity,
     find_all_occurrences,
 )
+from middleware.adapters import detect_and_parse_format
 
 
 class CandidateSpan(BaseModel):
@@ -57,6 +58,20 @@ def find_candidate_spans(
     """
     if not document_text:
         return []
+
+    # Format Adapter check first (for FASTA, GenBank ORIGIN, FASTQ)
+    fmt_name, adapter_candidates = detect_and_parse_format(document_text, alphabet=alphabet, allow_iupac=allow_iupac)
+    if fmt_name in ("fasta", "genbank", "fastq") and adapter_candidates:
+        return [
+            CandidateSpan(
+                start=c.start,
+                end=c.end,
+                raw_text=document_text[c.start:c.end],
+                field_match=True,
+                field_label=c.header_or_id
+            )
+            for c in adapter_candidates
+        ]
 
     critic = ContextCritic()
     candidates: List[CandidateSpan] = []
@@ -120,6 +135,25 @@ def find_candidate_spans(
     return candidates
 
 
+def make_plain_verdict(validation_status: str, message: Optional[str] = None, num_candidates: int = 0, format_name: Optional[str] = None) -> str:
+    msg = message or ""
+    if validation_status == "verified":
+        fmt_note = f" via {format_name.upper()} adapter" if format_name and format_name != "text" else ""
+        return f"Verified: authentic sequence deterministically extracted and validated against source text{fmt_note}."
+    elif validation_status == "abstained":
+        if num_candidates > 1:
+            return "Not sure — multiple candidate sequence locations were found in the document. Please click a candidate span to disambiguate."
+        elif "semantic field" in msg or "CONTEXT_FIELD_MISMATCH" in msg:
+            return "Not sure — found sequences do not match the requested semantic field context. Please verify field label or document layout."
+        elif "EMPTY_DOCUMENT" in msg:
+            return "Not sure — input document is empty."
+        else:
+            return f"Not sure — {msg or 'insufficient evidence to establish authentic sequence'}. Downstream alignment blocked for safety."
+    elif validation_status == "rejected":
+        return f"Rejected — {msg or 'invalid nucleotide characters or structural violations detected'}."
+    return f"Status: {validation_status} — {msg}."
+
+
 def extract_sequence(
     document_text: str,
     field_type: str = "observed_sequence",
@@ -129,6 +163,8 @@ def extract_sequence(
     anchor_after: Optional[str] = None,
     allow_iupac: bool = False,
     use_ai: bool = True,
+    use_token_mask: Optional[bool] = None,
+    selected_span: Optional[SourceSpan] = None,
     request_id: Optional[str] = None
 ) -> ExtractionResponse:
     """
@@ -137,15 +173,18 @@ def extract_sequence(
     Adheres strictly to:
     - Never accept model-generated sequence as truth.
     - Zero-based half-open offsets referencing original document_text.
-    - Full provenance tracking.
+    - Full provenance tracking with salted HMAC.
     - Strict gating: unverified sequences are rejected or abstained.
     """
     tracker = ProvenanceTracker(document_text, alphabet=alphabet, request_id=request_id)
     tracker.set_anchors(anchor_before, anchor_after, candidate_quote)
 
+    fmt_name, _ = detect_and_parse_format(document_text, alphabet=alphabet, allow_iupac=allow_iupac)
+
     # 1. Empty document check
     if not document_text or not document_text.strip():
         tracker.record_decision("abstained", "abstained", "EMPTY_DOCUMENT")
+        rec = tracker.build_record()
         return ExtractionResponse(
             sequence=None,
             validation_status="abstained",
@@ -157,18 +196,76 @@ def extract_sequence(
             source_span=None,
             error_code="EMPTY_DOCUMENT",
             message="Document text is empty.",
-            provenance=tracker.build_record(),
+            provenance=rec,
+            redacted_provenance=rec.to_redacted_dict(),
             scout_proposal=None,
             critic_evaluation=None,
+            candidate_spans=[],
+            format_detected=fmt_name,
+            plain_language_verdict="Not sure — document text is empty.",
         )
 
-    # 2. AI Scout localization when anchors/quotes are not provided
+    # 2. Interactive Human-in-the-Loop Disambiguation (if selected_span provided)
+    if selected_span is not None:
+        start_idx = selected_span.start
+        end_idx = selected_span.end
+        seq, offset_map, norm_ops, invalids = parse_sequence_block(
+            document_text, start_idx, end_idx, alphabet, allow_iupac
+        )
+        for op in norm_ops:
+            tracker.add_normalization_op(op)
+        if invalids:
+            tracker.record_decision("rejected", "rejected", f"INVALID_NUCLEOTIDE_CHARACTERS: {','.join(set(invalids))}")
+            rec = tracker.build_record()
+            return ExtractionResponse(
+                sequence=None,
+                validation_status="rejected",
+                source_match=False,
+                boundaries_verified=False,
+                completeness_verified=False,
+                error_code="INVALID_NUCLEOTIDE_CHARACTERS",
+                message=f"Invalid nucleotide characters in selected span: {','.join(set(invalids))}",
+                provenance=rec,
+                redacted_provenance=rec.to_redacted_dict(),
+                format_detected="user_disambiguation",
+                plain_language_verdict=f"Rejected — invalid nucleotide characters in selected span: {','.join(set(invalids))}.",
+            )
+        if seq and offset_map:
+            span = SourceSpan(start=offset_map[0], end=offset_map[-1] + 1)
+            tracker.set_source_location(span.start, span.end, offset_map)
+            tracker.extracted_sequence = seq
+            tracker.recovery_method = "user_disambiguation"
+            tracker.candidate_located = True
+            tracker.alphabet_valid = True
+            tracker.boundaries_verified = True
+            tracker.completeness_verified = True
+            tracker.source_fidelity_verified = True
+            tracker.field_supported = True
+            tracker.record_decision("verified", "success", "Deterministically verified via user-disambiguated selection.")
+            rec = tracker.build_record()
+            return ExtractionResponse(
+                sequence=seq,
+                validation_status="verified",
+                source_match=True,
+                boundaries_verified=True,
+                completeness_verified=True,
+                recovery_method="user_disambiguation",
+                anchors_verified=False,
+                source_span=span,
+                message="Deterministically verified from user-disambiguated source span.",
+                provenance=rec,
+                redacted_provenance=rec.to_redacted_dict(),
+                format_detected="user_disambiguation",
+                plain_language_verdict="Verified: authentic sequence deterministically verified from user-selected candidate span.",
+            )
+
+    # 3. AI Scout localization when anchors/quotes are not provided
     if candidate_quote is None and anchor_before is None and anchor_after is None and use_ai:
         try:
             scout = ScoutAgent()
             tracker.llm_attempts += 1
-            logger.info("Calling Ollama Cloud Scout agent (%s) for field '%s'...", scout.client.model, field_type)
-            proposal = scout.propose_with_llm(document_text, field_type, alphabet)
+            logger.info("Calling Ollama Scout agent (%s) for field '%s' (token_mask=%s)...", scout.client.model, field_type, use_token_mask)
+            proposal = scout.propose_with_llm(document_text, field_type, alphabet, use_token_mask=use_token_mask)
             if proposal and proposal.candidate_quote:
                 tracker.ai_scout_used = True
                 tracker.scout_model = scout.client.model
@@ -185,7 +282,7 @@ def extract_sequence(
         except Exception as exc:
             logger.warning("Ollama Scout proposal encountered error (%s). Proceeding with deterministic fallback.", exc)
 
-    # 3. If candidate quote or anchors are provided, route through anchor recovery
+    # 4. If candidate quote or anchors are provided, route through anchor recovery
     if candidate_quote is not None or anchor_before is not None or anchor_after is not None:
         recovery_result = recover_with_anchors(
             document_text=document_text,
@@ -217,9 +314,17 @@ def extract_sequence(
                 recovery_result.offset_mapping
             )
 
+        rec = tracker.build_record()
+        fallback_candidates = find_candidate_spans(document_text, field_type, alphabet, allow_iupac)
+        cand_dicts = [
+            {"start": c.start, "end": c.end, "preview": document_text[c.start:min(c.end, c.start+40)], "label": c.field_label}
+            for c in fallback_candidates
+        ]
+
         if recovery_result.success and recovery_result.status == "verified":
             tracker.extracted_sequence = recovery_result.sequence
             tracker.record_decision("verified", "success", recovery_result.message)
+            rec = tracker.build_record()
             return ExtractionResponse(
                 sequence=recovery_result.sequence,
                 validation_status="verified",
@@ -230,13 +335,17 @@ def extract_sequence(
                 anchors_verified=recovery_result.anchors_verified,
                 source_span=recovery_result.source_span,
                 message=recovery_result.message,
-                provenance=tracker.build_record(),
+                provenance=rec,
+                redacted_provenance=rec.to_redacted_dict(),
                 scout_proposal=tracker.scout_proposal,
                 critic_evaluation=tracker.critic_evaluation,
+                format_detected=fmt_name,
+                plain_language_verdict=make_plain_verdict("verified", recovery_result.message, format_name=fmt_name),
             )
         else:
             final_status = recovery_result.status
             tracker.record_decision(final_status, "abstained" if final_status == "abstained" else "rejected", recovery_result.message)
+            rec = tracker.build_record()
             return ExtractionResponse(
                 sequence=None,
                 validation_status=final_status,
@@ -248,17 +357,26 @@ def extract_sequence(
                 source_span=recovery_result.source_span,
                 error_code=recovery_result.error_code,
                 message=recovery_result.message,
-                provenance=tracker.build_record(),
+                provenance=rec,
+                redacted_provenance=rec.to_redacted_dict(),
                 scout_proposal=tracker.scout_proposal,
                 critic_evaluation=tracker.critic_evaluation,
+                candidate_spans=cand_dicts if len(cand_dicts) > 1 else None,
+                format_detected=fmt_name,
+                plain_language_verdict=make_plain_verdict(final_status, recovery_result.message, len(cand_dicts), format_name=fmt_name),
             )
 
-    # 4. No candidate quote or anchors provided: deterministic field discovery
+    # 5. No candidate quote or anchors provided: deterministic field discovery
     critic = ContextCritic()
     candidates = find_candidate_spans(document_text, field_type, alphabet, allow_iupac)
+    cand_dicts = [
+        {"start": c.start, "end": c.end, "preview": document_text[c.start:min(c.end, c.start+40)], "label": c.field_label}
+        for c in candidates
+    ]
 
     if not candidates:
         tracker.record_decision("abstained", "abstained", "NO_SEQUENCE_FOUND")
+        rec = tracker.build_record()
         return ExtractionResponse(
             sequence=None,
             validation_status="abstained",
@@ -270,9 +388,12 @@ def extract_sequence(
             source_span=None,
             error_code="NO_SEQUENCE_FOUND",
             message="No sequence matching field criteria found in document.",
-            provenance=tracker.build_record(),
+            provenance=rec,
+            redacted_provenance=rec.to_redacted_dict(),
             scout_proposal=tracker.scout_proposal,
             critic_evaluation=tracker.critic_evaluation,
+            format_detected=fmt_name,
+            plain_language_verdict="Not sure — no sequence content found in document matching requested alphabet criteria.",
         )
 
     # Evaluate candidates by field support (using Ollama Context Critic if use_ai=True)
@@ -297,6 +418,7 @@ def extract_sequence(
 
         if invalids:
             tracker.record_decision("rejected", "rejected", f"INVALID_NUCLEOTIDE_CHARACTERS: {','.join(set(invalids))}")
+            rec = tracker.build_record()
             return ExtractionResponse(
                 sequence=None,
                 validation_status="rejected",
@@ -305,9 +427,12 @@ def extract_sequence(
                 completeness_verified=False,
                 error_code="INVALID_NUCLEOTIDE_CHARACTERS",
                 message=f"Invalid nucleotide characters: {','.join(set(invalids))}",
-                provenance=tracker.build_record(),
+                provenance=rec,
+                redacted_provenance=rec.to_redacted_dict(),
                 scout_proposal=tracker.scout_proposal,
                 critic_evaluation=tracker.critic_evaluation,
+                format_detected=fmt_name,
+                plain_language_verdict=f"Rejected — invalid nucleotide characters detected: {','.join(set(invalids))}.",
             )
 
         assert offset_map is not None
@@ -322,6 +447,7 @@ def extract_sequence(
         tracker.source_fidelity_verified = True
         tracker.field_supported = True
         tracker.record_decision("verified", "success", "Deterministically extracted from field context.")
+        rec = tracker.build_record()
 
         return ExtractionResponse(
             sequence=seq,
@@ -333,13 +459,17 @@ def extract_sequence(
             anchors_verified=False,
             source_span=span,
             message="Deterministically extracted and verified from field context.",
-            provenance=tracker.build_record(),
+            provenance=rec,
+            redacted_provenance=rec.to_redacted_dict(),
             scout_proposal=tracker.scout_proposal,
             critic_evaluation=tracker.critic_evaluation,
+            format_detected=fmt_name,
+            plain_language_verdict=make_plain_verdict("verified", "Deterministically extracted from field context.", format_name=fmt_name),
         )
 
     elif len(supported_candidates) > 1:
         tracker.record_decision("abstained", "abstained", "AMBIGUOUS_SOURCE_LOCATION")
+        rec = tracker.build_record()
         return ExtractionResponse(
             sequence=None,
             validation_status="abstained",
@@ -350,12 +480,17 @@ def extract_sequence(
             anchors_verified=False,
             error_code="AMBIGUOUS_SOURCE_LOCATION",
             message="Multiple candidate sequence locations remain plausible for the requested field.",
-            provenance=tracker.build_record(),
+            provenance=rec,
+            redacted_provenance=rec.to_redacted_dict(),
             scout_proposal=tracker.scout_proposal,
             critic_evaluation=tracker.critic_evaluation,
+            candidate_spans=cand_dicts,
+            format_detected=fmt_name,
+            plain_language_verdict=make_plain_verdict("abstained", "Multiple candidate sequence locations remain plausible.", len(supported_candidates), format_name=fmt_name),
         )
     else:
         tracker.record_decision("abstained", "abstained", "CONTEXT_FIELD_MISMATCH")
+        rec = tracker.build_record()
         return ExtractionResponse(
             sequence=None,
             validation_status="abstained",
@@ -366,7 +501,11 @@ def extract_sequence(
             anchors_verified=False,
             error_code="CONTEXT_FIELD_MISMATCH",
             message="Found sequences do not match the requested semantic field context.",
-            provenance=tracker.build_record(),
+            provenance=rec,
+            redacted_provenance=rec.to_redacted_dict(),
             scout_proposal=tracker.scout_proposal,
             critic_evaluation=tracker.critic_evaluation,
+            candidate_spans=cand_dicts if len(cand_dicts) > 1 else None,
+            format_detected=fmt_name,
+            plain_language_verdict=make_plain_verdict("abstained", "CONTEXT_FIELD_MISMATCH", len(cand_dicts), format_name=fmt_name),
         )

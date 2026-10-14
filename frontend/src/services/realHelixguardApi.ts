@@ -42,11 +42,13 @@ export class RealHelixGuardApi implements IHelixGuardApi {
     const isDbMode = request.searchDatabase || request.referenceSequence === 'DATABASE' || !request.referenceSequence.trim();
 
     if (isDbMode) {
-      const payload = {
+      const payload: any = {
         document_text: request.documentText,
         field_type: request.targetField.toLowerCase().replace(/\s+/g, '_'),
         sequence_alphabet: request.alphabet,
         use_ai: request.useAi !== false,
+        use_token_mask: request.useTokenMask,
+        selected_span: request.selectedSpan,
         top_k: 5,
       };
 
@@ -67,12 +69,14 @@ export class RealHelixGuardApi implements IHelixGuardApi {
       return this.transformIdentifyBackendResponse(data, request);
     }
 
-    const payload = {
+    const payload: any = {
       document_text: request.documentText,
       reference_sequence: request.referenceSequence,
       field_type: request.targetField.toLowerCase().replace(/\s+/g, '_'),
       sequence_alphabet: request.alphabet,
       use_ai: request.useAi !== false,
+      use_token_mask: request.useTokenMask,
+      selected_span: request.selectedSpan,
     };
 
     const resp = await fetch(`${this.baseUrl}/extract-and-align`, {
@@ -134,6 +138,13 @@ export class RealHelixGuardApi implements IHelixGuardApi {
         normalizationOps: prov.normalization_ops || [],
       },
       validationErrors: ext.error_code ? [ext.message || ext.error_code] : [],
+      candidateSpans: ext.candidate_spans || [],
+      redactedProvenance: ext.redacted_provenance || null,
+      formatDetected: ext.format_detected || undefined,
+      inputHmac: prov.input_hmac || undefined,
+      plainLanguageVerdict: ext.plain_language_verdict || (ext.validation_status === 'verified'
+        ? 'Verified: authentic sequence deterministically matched and validated.'
+        : `Not sure — ${ext.message || 'evidence weak'}`),
     };
 
     const topMatch = ident?.closest_match;
@@ -287,7 +298,14 @@ export class RealHelixGuardApi implements IHelixGuardApi {
         sourceField: req.targetField,
         normalizationOps: prov.normalization_ops || [],
       },
-      validationErrors: ext.message ? [ext.message] : [],
+      validationErrors: ext.message && ext.validation_status !== 'verified' ? [ext.message] : [],
+      candidateSpans: ext.candidate_spans || [],
+      redactedProvenance: ext.redacted_provenance || null,
+      formatDetected: ext.format_detected || undefined,
+      inputHmac: prov.input_hmac || undefined,
+      plainLanguageVerdict: ext.plain_language_verdict || (ext.validation_status === 'verified'
+        ? 'Verified: authentic sequence deterministically matched and validated.'
+        : `Not sure — ${ext.message || 'evidence weak'}`),
     };
 
     // Construct AlignmentResult

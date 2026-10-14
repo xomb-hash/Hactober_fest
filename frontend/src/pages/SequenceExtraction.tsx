@@ -15,6 +15,7 @@ interface Props {
   onRun: (req: ExtractionRequest) => void;
   onRunScenario: (id: string) => void;
   onLoadSample: () => void;
+  onClear?: () => void;
   sampleText: string;
   sampleTrigger?: number;
 }
@@ -27,6 +28,7 @@ export function SequenceExtraction({
   onRun,
   onRunScenario,
   onLoadSample,
+  onClear,
   sampleTrigger = 0,
 }: Props) {
   return (
@@ -39,6 +41,8 @@ export function SequenceExtraction({
           <DocumentInput
             onRun={onRun}
             onLoadSample={onLoadSample}
+            onClear={onClear}
+            result={result}
             errors={errors}
             loading={loading}
             initialDocumentText={SAMPLE_REPORT_TEXT}
