@@ -61,7 +61,6 @@ function App() {
         <Header
           title={meta.title}
           description={meta.description}
-          onLoadSample={handleLoadSample}
           isLiveMode={isLiveMode}
           onToggleMode={setLiveMode}
           backendReachable={backendReachable}

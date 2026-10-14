@@ -1,10 +1,9 @@
-import { FileText, Server, Sparkles } from 'lucide-react';
+import { Server, Sparkles } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 
 interface Props {
   title: string;
   description: string;
-  onLoadSample?: () => void;
   isLiveMode?: boolean;
   onToggleMode?: (live: boolean) => void;
   backendReachable?: boolean;
@@ -13,7 +12,6 @@ interface Props {
 export function Header({
   title,
   description,
-  onLoadSample,
   isLiveMode = true,
   onToggleMode,
   backendReachable = false,
@@ -57,18 +55,6 @@ export function Header({
           >
             {isLiveMode ? <Server size={13} className="text-emerald-600" /> : <Sparkles size={13} />}
             {isLiveMode ? 'Switch to Demo Mock' : 'Switch to Live Backend'}
-          </button>
-        )}
-
-        {onLoadSample && (
-          <button
-            id="load-sample-report-btn"
-            onClick={onLoadSample}
-            className="btn-secondary flex-shrink-0"
-            title="Load the synthetic sample report into the document input"
-          >
-            <FileText size={14} />
-            Load sample report
           </button>
         )}
       </div>
